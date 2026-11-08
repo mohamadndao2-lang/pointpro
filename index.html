@@ -250,7 +250,7 @@ function dl(bytes,name,mime){var blob=new Blob([bytes],{type:mime||"application/
 var LSK="pointpro_db_v1";
 var ROLES={admin:"Administrateur",directeur:"Directeur",rh:"Responsable RH",responsable:"Responsable de site",chef:"Chef d’équipe",pointeur:"Pointeur",comptable:"Comptable",auditeur:"Auditeur",ouvrier:"Ouvrier"};
 // Capacités : ce que chaque rôle peut faire dans l’application
-var PERM={admin:["manage","users","workers","scan","sessions","times","correct","claims","pay","reports","settings","audit"],
+var PERM={admin:["view","manage","users","workers","scan","sessions","times","correct","claims","pay","reports","settings","audit"],
 directeur:["view","times","claims","pay","reports","audit","correct"],
 rh:["view","workers","times","correct","claims","pay","reports"],
 responsable:["view","workers","scan","sessions","times","correct","claims","reports"],
@@ -422,6 +422,8 @@ vHome:function(){var u=this.user();if(!can("view")&&u.role!=="ouvrier")return th
   this.k("Réclamations ouvertes",claimsOpen,claimsOpen?"or":"")+this.k("Total à payer ("+ym+")",fmM(totPay),"gr")+"</div>"+
   "<div class=\"grid2\"><button class=\"btn primary\" onclick=\"App.setTab('scan')\">📷 Ouvrir le scan continu</button>"+
   "<button class=\"btn\" onclick=\"App.setTab('workers')\">👥 Gérer l’équipe</button></div>"+
+  "<div class=\"card\" style=\"margin-top:14px\"><h3>📅 Heures du jour — qui, quand, combien</h3><table class=\"d\"><tr><th>Travailleur</th><th>Arrivée</th><th>Départ</th><th>Effectif</th><th>HS</th></tr>"+
+  ws.map(function(w,i){var r=days[i];return "<tr><td>"+esc(w.prenom+" "+w.nom)+"</td><td>"+(r.arrivee||"—")+"</td><td>"+(r.depart||"—")+"</td><td>"+(r.arrivee?fmtH(r.effectif):"—")+"</td><td>"+(r.hs?fmtH(r.hs):"—")+"</td></tr>"}).join("")+"</table></div>"+
   "<div class=\"card\" style=\"margin-top:14px\"><h3>Activité récente</h3>"+this.recentList()+"</div>"},
 k:function(t,v,c){return"<div class=\"stat\"><div class=\"t\">"+t+"</div><div class=\"v\" style=\"color:"+(c==="gr"?"var(--gr)":c==="or"?"var(--or)":c==="no"?"var(--rd)":"var(--txt)")+"\">"+v+"</div></div>"},
 recentList:function(){var evs=sc(DB.events).slice().sort(function(a,b){return b.ts<a.ts?1:-1}).slice(0,8);
