@@ -413,17 +413,25 @@ vHome:function(){var u=this.user();if(!can("view")&&u.role!=="ouvrier")return th
   var inc=days.filter(function(r){return r.incomplet}).length;
   var claimsOpen=sc(DB.claims).filter(function(c){return["nouvelle","encours","attente"].indexOf(c.status)>=0}).length;
   var ym=d.slice(0,7),totPay=ws.reduce(function(s,w){return s+self.payOf(w,ym).estimated},0);
+  var mTot=ws.reduce(function(s,w){return s+self.payOf(w,ym).hours},0);
+  var q=this.quinzRange(d),rowsPay=ws.map(function(w){var p=self.payRange(w,q.from,q.to);return{w:w,p:p}}),qPay=rowsPay.reduce(function(s,r){return s+r.p.estimated},0);
   var n=this.notifCount();
   return this.sec("Tableau de bord — "+dLabel(d),"Bienvenue "+esc(u.name)+" · "+ROLES[u.role])+
   (n?"<div class=\"msg inf\" onclick=\"App.setTab('more')\" style=\"cursor:pointer\">🔔 "+n+" notification(s) non lue(s) — touche pour voir</div>":"")+
   "<div class=\"kpi\">"+this.k("Travailleurs actifs",ws.length)+this.k("Présents aujourd’hui",presents,"gr")+
   this.k("Absents présumés",absents,absents?"or":"")+this.k("Retards",retards,retards?"or":"")+
   this.k("Heures travaillées",fmtH(hTot),"gr")+this.k("Heures supp.",fmtH(hsTot))+this.k("Journées incomplètes",inc,inc?"no":"")+
-  this.k("Réclamations ouvertes",claimsOpen,claimsOpen?"or":"")+this.k("Total à payer ("+ym+")",fmM(totPay),"gr")+"</div>"+
+  this.k("Réclamations ouvertes",claimsOpen,claimsOpen?"or":"")+this.k("Total à payer ("+ym+")",fmM(totPay),"gr")+
+  this.k("Heures ce mois ("+ym+")",fmtH(mTot),"gr")+this.k("À payer "+q.label,fmM(qPay),"gr")+"</div>"+
   "<div class=\"grid2\"><button class=\"btn primary\" onclick=\"App.setTab('scan')\">📷 Ouvrir le scan continu</button>"+
   "<button class=\"btn\" onclick=\"App.setTab('workers')\">👥 Gérer l’équipe</button></div>"+
   "<div class=\"card\" style=\"margin-top:14px\"><h3>📅 Heures du jour — qui, quand, combien</h3><table class=\"d\"><tr><th>Travailleur</th><th>Arrivée</th><th>Départ</th><th>Effectif</th><th>HS</th></tr>"+
   ws.map(function(w,i){var r=days[i];return "<tr><td>"+esc(w.prenom+" "+w.nom)+"</td><td>"+(r.arrivee||"—")+"</td><td>"+(r.depart||"—")+"</td><td>"+(r.arrivee?fmtH(r.effectif):"—")+"</td><td>"+(r.hs?fmtH(r.hs):"—")+"</td></tr>"}).join("")+"</table></div>"+
+  "<div class=\"card\" style=\"margin-top:14px\"><h3>💰 À payer par ouvrier — "+q.label+" ("+dLabel(q.from)+" → "+dLabel(q.to)+")</h3>"+
+  "<table class=\"d\"><tr><th>Ouvrier</th><th>Contrat</th><th>Jours val.</th><th>Heures</th><th>HS</th><th>À payer</th></tr>"+
+  rowsPay.map(function(r){return "<tr><td>"+esc(r.w.prenom+" "+r.w.nom)+"</td><td>"+esc(r.w.mode)+" · "+fmM(r.w.tarif)+(r.w.mode==="journalier"?"/j":r.w.mode==="horaire"?"/h":"")+"</td><td>"+r.p.validDays+"</td><td>"+fmtH(r.p.hours)+"</td><td>"+fmtH(r.p.hs)+"</td><td class=\"green\"><b>"+fmM(r.p.estimated)+"</b></td></tr>"}).join("")+
+  "<tr><th colspan=\"5\">Total "+q.label+"</th><th>"+fmM(qPay)+"</th></tr></table>"+
+  "<div class=\"mut small\" style=\"margin-top:6px\">Cumulé depuis le début de la quinzaine (paie par quinzaine : 1re = 1→15, 2e = 16→fin de mois). Journalier : jours validés × montant/jour · Horaire : heures × taux, HS majorées ×"+this.hsMajor()+" · Mensuel : moitié du salaire mensuel.</div></div>"+
   "<div class=\"card\" style=\"margin-top:14px\"><h3>Activité récente</h3>"+this.recentList()+"</div>"},
 k:function(t,v,c){return"<div class=\"stat\"><div class=\"t\">"+t+"</div><div class=\"v\" style=\"color:"+(c==="gr"?"var(--gr)":c==="or"?"var(--or)":c==="no"?"var(--rd)":"var(--txt)")+"\">"+v+"</div></div>"},
 recentList:function(){var evs=sc(DB.events).slice().sort(function(a,b){return b.ts<a.ts?1:-1}).slice(0,8);
@@ -870,6 +878,15 @@ payOf:function(w,ym){var days=this.periodDays(ym),self=this,totH=0,totHS=0,valid
   else if(w.mode==="horaire")est=totH*w.tarif+totHS*w.tarif*(this.hsMajor()||1);
   else if(w.mode==="mensuel")est=w.tarif;
   else est=w.tarif;
+  return{hours:totH,hs:totHS,validDays:validDays,rawDays:rawDays,estimated:est}},
+payRange:function(w,from,to){var d=new Date(from+"T00:00:00"),end=new Date(to+"T00:00:00"),self=this,totH=0,totHS=0,validDays=0,rawDays=0,est=0;
+  var deb=w.dateDebut||null,fin=w.dateFin||null;
+  while(d<=end){var dt=today(d);d.setDate(d.getDate()+1);if(deb&&dt<deb)continue;if(fin&&dt>fin)continue;
+    var r=self.computeDayC(w.id,dt);if(r.arrivee){rawDays++;totH+=r.effectif;totHS+=r.hs;if(self.dayValidated(w.id,dt))validDays++}}
+  if(w.mode==="journalier")est=validDays*w.tarif;
+  else if(w.mode==="horaire")est=totH*w.tarif+totHS*w.tarif*(this.hsMajor()||1);
+  else if(w.mode==="mensuel")est=Math.round(w.tarif/2);
+  else est=Math.round(w.tarif/2);
   return{hours:totH,hs:totHS,validDays:validDays,rawDays:rawDays,estimated:est}},
 hsMajor:function(){var c=this.myCompany();return c&&c.hsMajor?+c.hsMajor:1.25},
 vPay:function(){if(!can("pay"))return this.deny();
