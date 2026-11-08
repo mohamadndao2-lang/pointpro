@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="POINTPRO">
+<link rel="manifest" href="manifest.json">
+<title>POINTPRO — Pointage mobile</title>
+<style>
+:root{--bg:#0b1220;--card:#111c33;--card2:#0d1626;--line:#23324e;--mut:#8ea3c2;--txt:#eaf1fb;--cy:#22d3ee;--gr:#34d399;--or:#fbbf24;--rd:#f87171;--vio:#a78bfa}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:16px;padding-bottom:76px;overscroll-behavior-y:contain}
+input,select,textarea,button{font:inherit;color:inherit}
+input,select,textarea{background:#0a1322;border:1px solid var(--line);border-radius:12px;padding:12px 14px;width:100%;min-height:46px;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--cy)}
+label.fld{display:block;font-size:12px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.6px;margin:12px 0 5px}
+.h{font-size:20px;font-weight:800}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+.card h3{font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;color:var(--cy)}
+.card h3.gr{color:var(--gr)}.card h3.or{color:var(--or)}.card h3.rd{color:var(--rd)}.card h3.vio{color:var(--vio)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:#1b2a47;border:1px solid #2c426b;border-radius:12px;padding:12px 18px;font-weight:700;cursor:pointer;min-height:46px;user-select:none}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:linear-gradient(135deg,#0ea5e9,#34d399);border:none;color:#04222b}
+.btn.warn{background:#7c2d12;border-color:#a13a12;color:#fed7aa}
+.btn.ghost{background:transparent}
+.btn.blk{width:100%}
+.btn.sm{padding:8px 12px;min-height:38px;font-size:13px}
+.pill{display:inline-block;padding:4px 10px;border-radius:99px;font-size:11px;font-weight:800;letter-spacing:.4px}
+.pill.ok{background:#064e3b;color:#6ee7b7}.pill.no{background:#7f1d1d;color:#fca5a5}.pill.wn{background:#78350f;color:#fcd34d}.pill.inf{background:#164e63;color:#67e8f9}
+.topbar{position:sticky;top:0;z-index:50;background:#0a1322e8;backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;gap:12px;padding-top:calc(12px + env(safe-area-inset-top))}
+.topbar .brand{font-weight:900;font-size:17px;background:linear-gradient(135deg,#22d3ee,#34d399);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.topbar select{max-width:40vw;flex:1}
+.tabbar{position:fixed;bottom:0;left:0;right:0;z-index:50;background:#0a1322f2;backdrop-filter:blur(10px);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom)}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 4px 8px;color:var(--mut);font-size:10.5px;font-weight:700;cursor:pointer;border-top:2px solid transparent}
+.tab .ic{font-size:21px}
+.tab.on{color:var(--cy);border-top:2px solid var(--cy);background:#0d1c3088}
+.stat{background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:12px}
+.stat .t{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--mut)}
+.stat .v{font-size:19px;font-weight:900;margin-top:4px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.mut{color:var(--mut)}
+.small{font-size:12px}
+.msg{border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:14px;line-height:1.5}
+.msg.ok{background:#052e1c;border:1px solid #14532d;color:#a7f3d0}
+.msg.no{background:#3f0d0d;border:1px solid #7f1d1d;color:#fca5a5}
+.msg.wn{background:#362405;border:1px solid #713f12;color:#fde68a}
+.msg.inf{background:#082744;border:1px solid #0c4a6e;color:#a5f3fc}
+.sheet{position:fixed;inset:0;z-index:100;background:#000a;display:none;align-items:flex-end}
+.sheet.on{display:flex}
+.sheet .inner{background:var(--card2);border-radius:22px 22px 0 0;max-height:88vh;overflow:auto;width:100%;padding:18px 18px 40px;border-top:1px solid var(--line)}
+.grip{width:44px;height:5px;background:#334155;border-radius:9px;margin:0 auto 14px}
+.qrbox{background:#fff;padding:10px;border-radius:12px;display:inline-block}
+.badge-card{width:100%;max-width:420px;background:#fff;color:#0f172a;border-radius:14px;overflow:hidden;display:flex;font-family:Arial,sans-serif;border:1px solid #cbd5e1}
+.badge-left{width:38%;padding:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;background:linear-gradient(160deg,#0e7490,#065f46);color:#fff}
+.badge-left img,.badge-left .ph{width:74%;aspect-ratio:3/4;object-fit:cover;border-radius:8px;background:#334155;display:flex;align-items:center;justify-content:center;font-size:10px;color:#94a3b8}
+.badge-right{flex:1;padding:8px 10px;display:flex;flex-direction:column;justify-content:space-between}
+.badge-right .co{font-size:9.5px;font-weight:800;color:#0e7490;text-transform:uppercase;line-height:1.2}
+.badge-right .nm{font-size:15px;font-weight:900;margin:2px 0;line-height:1.1}
+.badge-right .fn{font-size:10px;color:#475569;font-weight:700}
+.badge-right .id{font-size:9.5px;font-weight:800;color:#334155;letter-spacing:.5px}
+.badge-right .qr{display:flex;gap:8px;align-items:center}
+.badge-right .qr img{width:64px;height:64px}
+.badge-right .qr .hint{font-size:7px;color:#94a3b8;line-height:1.3}
+.avatar{width:44px;height:44px;border-radius:12px;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:20px;overflow:hidden;flex-shrink:0}
+.avatar img{width:100%;height:100%;object-fit:cover}
+.lrow{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card2);margin-bottom:10px}
+.lrow:active{background:#152238}
+.lrow .nm{font-weight:800}
+.lrow .sub{font-size:12px;color:var(--mut);margin-top:2px}
+.lrow .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+table.d{width:100%;border-collapse:collapse;font-size:12.5px}
+table.d th{text-align:left;color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding:7px 8px;border-bottom:1px solid var(--line)}
+table.d td{padding:8px;border-bottom:1px solid #1b2942}
+.tblwrap{overflow-x:auto}
+#view{padding:14px 14px 30px;max-width:760px;margin:0 auto}
+#scanbox{position:relative;border-radius:18px;overflow:hidden;background:#000;aspect-ratio:3/4;display:flex;align-items:center;justify-content:center}
+#scanbox video{width:100%;height:100%;object-fit:cover}
+#scanframe{position:absolute;width:72%;aspect-ratio:1;border:3px solid #22d3ee55;border-radius:18px;box-shadow:0 0 0 1000px #0006;pointer-events:none}
+#scanflash{position:absolute;inset:0;background:#34d399;opacity:0;pointer-events:none;transition:opacity .25s}
+.scanbig{font-size:15px;font-weight:900}
+.counter{font-size:12px;font-weight:800;padding:6px 10px;border-radius:10px;background:#0a1322}
+.hide{display:none!important}
+.sw{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px}
+.chip{flex-shrink:0;padding:10px 16px;border-radius:99px;background:#13233d;border:1px solid var(--line);font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap}
+.chip.on{background:linear-gradient(135deg,#0ea5e9,#34d399);color:#04222b;border-color:transparent}
+.kpi{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+@media (min-width:640px){.kpi{grid-template-columns:repeat(4,1fr)}}
+details.faq{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px;background:var(--card2)}
+details.faq summary{cursor:pointer;font-weight:700}
+details.faq .b{margin-top:8px;color:var(--mut);line-height:1.7;font-size:14px}
+.bigbtn{width:100%;padding:16px;font-size:17px;font-weight:900;border-radius:14px;border:none;background:linear-gradient(135deg,#0ea5e9,#34d399);color:#04222b;cursor:pointer}
+.bigbtn:active{transform:scale(.98)}
+@media print{body{background:#fff;color:#000;padding:0}.noprint{display:none!important}.tabbar,.topbar{display:none!important}#view{padding:0;max-width:none}.card{border:none;background:#fff;color:#000}h3{color:#000!important}.prbadge{page-break-inside:avoid}}
+</style>
+</head>
+<body>
+<div id="login" style="display:none;min-height:100vh;padding:28px 20px;max-width:430px;margin:0 auto">
+  <div style="text-align:center;padding:26px 0 10px">
+    <div style="font-size:52px">📍</div>
+    <div style="font-size:30px;font-weight:900;background:linear-gradient(135deg,#22d3ee,#34d399);-webkit-background-clip:text;-webkit-text-fill-color:transparent">POINTPRO</div>
+    <div class="mut small" style="margin-top:6px">Chaque heure travaillée est enregistrée.<br>Chaque présence est traçable. Chaque rémunération est justifiable.</div>
+  </div>
+  <div id="loginForm"></div>
+</div>
+<div id="app" style="display:none">
+  <div class="topbar noprint">
+    <div style="flex-shrink:0">📍</div>
+    <div class="brand">POINTPRO</div>
+    <select id="siteSel" onchange="App.setScanSite(this.value)"></select>
+    <button class="btn sm ghost" onclick="App.logout()" title="Déconnexion">⏻</button>
+  </div>
+  <div id="view"></div>
+  <div class="tabbar noprint" id="tabbar"></div>
+</div>
+<div class="sheet" id="sheet" onclick="if(event.target===this)App.closeSheet()"><div class="inner" id="sheetBody"></div></div>
+<script>
+"use strict";
+// ================== MOTEUR BINAIRE (ZIP/PNG/QR/DOCX/XLSX) ==================
+function u8(s){var u=new Uint8Array(s.length);for(var i=0;i<s.length;i++)u[i]=s.charCodeAt(i)&255;return u}
+function cat(a){var t=0;a.forEach(function(x){t+=x.length});var r=new Uint8Array(t),o=0;a.forEach(function(x){r.set(x,o);o+=x.length});return r}
+var CRCT=(function(){var t=[],c;for(var n=0;n<256;n++){c=n;for(var k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);t[n]=c>>>0}return t})();
+function crc32(b){var c=0xFFFFFFFF;for(var i=0;i<b.length;i++)c=CRCT[(c^b[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0}
+function b64enc(u){var A="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",r="";for(var i=0;i<u.length;i+=3){var b0=u[i],b1=i+1<u.length?u[i+1]:0,b2=i+2<u.length?u[i+2]:0,n=(b0<<16)|(b1<<8)|b2;r+=A[n>>18&63]+A[n>>12&63]+(i+1<u.length?A[n>>6&63]:"=")+(i+2<u.length?A[n&63]:"=")}return r}
+function b64dec(s){var A="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",m={};for(var i=0;i<64;i++)m[A[i]]=i;s=s.replace(/[^A-Za-z0-9+\/]/g,"");var out=[],j=0;for(var i=0;i<s.length;i+=4){var n=(m[s[i]]<<18)|(m[s[i+1]]<<12)|((m[s[i+2]]||0)<<6)|(m[s[i+3]]||0);out.push(n>>16&255);if(s[i+2])out.push(n>>8&255);if(s[i+3])out.push(n&255)}return new Uint8Array(out)}
+function zipStore(files){var parts=[],cd=[],off=0;
+  files.forEach(function(f){var nm=u8(f.name),crc=crc32(f.data),sz=f.data.length;
+    var lh=new Uint8Array(30+nm.length),d=new DataView(lh.buffer);
+    d.setUint32(0,0x04034b50,true);d.setUint16(4,20,true);d.setUint16(6,0,true);d.setUint16(8,0,true);
+    d.setUint16(10,0,true);d.setUint16(12,0x21,true);d.setUint32(14,crc,true);
+    d.setUint32(18,sz,true);d.setUint32(22,sz,true);d.setUint16(26,nm.length,true);d.setUint16(28,0,true);lh.set(nm,30);
+    parts.push(lh,f.data);
+    var ch=new Uint8Array(46+nm.length),c=new DataView(ch.buffer);
+    c.setUint32(0,0x02014b50,true);c.setUint16(4,20,true);c.setUint16(6,20,true);c.setUint16(8,0,true);
+    c.setUint16(10,0,true);c.setUint16(12,0,true);c.setUint16(14,0x21,true);c.setUint32(16,crc,true);
+    c.setUint32(20,sz,true);c.setUint32(24,sz,true);c.setUint16(28,nm.length,true);c.setUint16(30,0,true);
+    c.setUint16(32,0,true);c.setUint16(34,0,true);c.setUint32(38,0,true);c.setUint32(42,off,true);ch.set(nm,46);
+    cd.push(ch);off+=lh.length+sz});
+  var cds=cd.reduce(function(s,c){return s+c.length},0);
+  var eo=new Uint8Array(22),e=new DataView(eo.buffer);
+  e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);
+  e.setUint32(12,cds,true);e.setUint32(16,off,true);
+  return cat(parts.concat(cd,[eo]))}
+// ---- PNG (deflate stocké, niveaux de gris) ----
+function adler32(b){var a=1,c=0;for(var i=0;i<b.length;i++){a=(a+b[i])%65521;c=(c+a)%65521}return((c<<16)|a)>>>0}
+function pngChunk(t,d){var l=new Uint8Array(4);new DataView(l.buffer).setUint32(0,d.length,false);
+  var c=new Uint8Array(4);new DataView(c.buffer).setUint32(0,crc32(cat([u8(t),d])),false);return cat([l,u8(t),d,c])}
+function pngGray(w,h,pix){var ih=new Uint8Array(13),v=new DataView(ih.buffer);
+  v.setUint32(0,w);v.setUint32(4,h);ih[8]=8;ih[9]=0;
+  var raw=new Uint8Array(h*(w+1));
+  for(var y=0;y<h;y++){raw[y*(w+1)]=0;for(var x=0;x<w;x++)raw[y*(w+1)+1+x]=pix[y*w+x]}
+  var bl=[],p=0;
+  while(p<raw.length){var n=Math.min(65535,raw.length-p),b=new Uint8Array(5+n);
+    b[0]=p+n>=raw.length?1:0;b[1]=n&255;b[2]=(n>>8)&255;b[3]=(~n)&255;b[4]=((~n)>>8)&255;b.set(raw.subarray(p,p+n),5);bl.push(b);p+=n}
+  var ad=new Uint8Array(4);new DataView(ad.buffer).setUint32(0,adler32(raw),false);
+  var idat=cat([u8("\x78\x01")].concat(bl,[ad]));
+  return cat([u8("\x89PNG\x0d\x0a\x1a\x0a"),pngChunk("IHDR",ih),pngChunk("IDAT",idat),pngChunk("IEND",new Uint8Array(0))])}
+// ---- QR Code (versions 1-3, correction M, masque 0) — conforme ISO/IEC 18004 ----
+var QRSPC=[{n:21,dc:16,ec:10},{n:25,dc:28,ec:16},{n:29,dc:44,ec:26}];
+var GFEXP=new Array(256),GFLOG=new Array(256);
+(function(){var x=1;for(var i=0;i<255;i++){GFEXP[i]=x;GFLOG[x]=i;x<<=1;if(x&0x100)x^=0x11d}GFEXP[255]=GFEXP[0]})();
+function gmul(a,b){if(!a||!b)return 0;return GFEXP[(GFLOG[a]+GFLOG[b])%255]}
+function rsGen(n){var g=[1];for(var i=0;i<n;i++){var a=GFEXP[i],ng=new Array(g.length+1);
+  for(var k=0;k<=g.length;k++)ng[k]=((k<g.length?g[k]:0)^(k>0?gmul(a,g[k-1]):0));g=ng}return g.reverse()}
+function rsEnc(msg,n){var gen=rsGen(n),res=msg.slice();for(var k=0;k<n;k++)res.push(0);
+  for(var i=0;i<msg.length;i++){var f=res[i];if(f)for(var j=1;j<gen.length;j++)res[i+j]^=gmul(gen[j],f)}
+  return res.slice(msg.length)}
+function qrEncode(str){
+  var bytes=[];for(var i=0;i<str.length;i++){var c=str.charCodeAt(i);
+    if(c<128)bytes.push(c);else if(c<2048)bytes.push(0xc0|c>>6,0x80|c&63);else bytes.push(0xe0|c>>12,0x80|c>>6&63,0x80|c&63)}
+  var sp=null;for(var i=0;i<QRSPC.length;i++)if(bytes.length<=QRSPC[i].dc){sp=QRSPC[i];break}
+  if(!sp)throw new Error("Contenu trop long pour le QR Code")
+  var bits="0100"+("00000000"+bytes.length.toString(2)).slice(-8);
+  bytes.forEach(function(b){bits+=("00000000"+b.toString(2)).slice(-8)});
+  var cap=sp.dc*8;bits+="0000".slice(0,Math.min(4,cap-bits.length));
+  while(bits.length%8)bits+="0";
+  var cw=[];for(var i=0;i<bits.length;i+=8)cw.push(parseInt(bits.substr(i,8),2));
+  var pad=[0xEC,0x11],p=0;while(cw.length<sp.dc)cw.push(pad[p++%2]);
+  var full=cw.concat(rsEnc(cw,sp.ec));
+  // ---- matrice ----
+  var size=sp.n,m=[];for(var y=0;y<size;y++){m.push([]);for(var x=0;x<size;x++)m[y].push(null)}
+  function put(x,y,v){if(x>=0&&y>=0&&x<size&&y<size)m[y][x]=v}
+  function finder(cx,cy){for(var dy=-1;dy<=7;dy++)for(var dx=-1;dx<=7;dx++){
+    put(cx+dx,cy+dy,(dx>=0&&dx<=6&&dy>=0&&dy<=6)?((dx>=2&&dx<=4&&dy>=2&&dy<=4)||(dx===0||dx===6||dy===0||dy===6)):false)}}
+  finder(0,0);finder(size-7,0);finder(0,size-7);
+  for(var i=8;i<size-8;i++){if(m[6][i]===null)m[6][i]=i%2===0;if(m[i][6]===null)m[i][6]=i%2===0}
+  var ac=size===25?18:size===29?22:-1;
+  if(ac>0)[[6,ac],[ac,6],[ac,ac]].forEach(function(q){
+    for(var dy=-2;dy<=2;dy++)for(var dx=-2;dx<=2;dx++){var x=q[0]+dx,y=q[1]+dy;
+      if(m[y]&&m[y][x]===null)m[y][x]=Math.max(Math.abs(dx),Math.abs(dy))!==1}});
+  m[size-8][8]=true;
+  var fb=0x5412,gb=function(i){return((fb>>i)&1)!==0};
+  var c1=[[0,8],[1,8],[2,8],[3,8],[4,8],[5,8],[7,8],[8,8],[8,7],[8,5],[8,4],[8,3],[8,2],[8,1],[8,0]];
+  var c2=[[8,size-1],[8,size-2],[8,size-3],[8,size-4],[8,size-5],[8,size-6],[8,size-7],[8,size-8],[size-7,8],[size-6,8],[size-5,8],[size-4,8],[size-3,8],[size-2,8],[size-1,8]];
+  for(var i=0;i<15;i++){m[c1[i][0]][c1[i][1]]=gb(i);m[c2[i][0]][c2[i][1]]=gb(i)}
+  var bs="";full.forEach(function(b){bs+=("00000000"+b.toString(2)).slice(-8)});
+  var bi=0;
+  for(var right=size-1;right>0;right-=2){
+    if(right===6)right--;
+    for(var vert=0;vert<size;vert++)for(var j=0;j<2;j++){
+      var x=right-j,up=((right+1)&2)===0,y=up?(size-1-vert):vert;
+      if(m[y][x]===null&&bi<bs.length){var v=bs[bi]==="1";bi++;if((x+y)%2===0)v=!v;m[y][x]=v}}}
+  for(var y=0;y<size;y++)for(var x=0;x<size;x++)if(m[y][x]===null)m[y][x]=false;
+  return{m:m,size:size}}
+function qrPng(str,scale){var q=qrEncode(str),quiet=4,n=q.size+quiet*2,px=scale||8,w=n*px,pix=new Uint8Array(w*w);
+  for(var y=0;y<w;y++)for(var x=0;x<w;x++){var mx=Math.floor(x/px)-quiet,my=Math.floor(y/px)-quiet;
+    pix[y*w+x]=(mx>=0&&my>=0&&mx<q.size&&my<q.size&&q.m[my][mx])?0:255}
+  return pngGray(w,w,pix)}
+function qrDataUrl(str,px){return"data:image/png;base64,"+b64enc(qrPng(str,px||8))}
+// ---- DOCX / XLSX ----
+function escX(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+var MM_TW=56.6929,MM_EMU=36000;
+function mmTw(mm){return Math.round(mm*MM_TW)}
+function mmEmu(mm){return Math.round(mm*MM_EMU)}
+function docxImg(rid,wmm,hmm){return"<w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\"><wp:extent cx=\""+mmEmu(wmm)+"\" cy=\""+mmEmu(hmm)+"\"/><wp:docPr id=\"1\" name=\"img\"/><a:graphic xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:nvPicPr><pic:cNvPr id=\"0\" name=\"img\"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed=\""+rid+"\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\""+mmEmu(wmm)+"\" cy=\""+mmEmu(hmm)+"\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>"}
+function buildDocx(bodyXml,images){ // images:[{rid,parts:[{name,data}]}] simplifié : passer parts directement + rels
+  var rels="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"+images.rels+"</Relationships>";
+  var ct="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"png\" ContentType=\"image/png\"/><Default Extension=\"jpeg\" ContentType=\"image/jpeg\"/><Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/><Override PartName=\"/word/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml\"/></Types>";
+  var rootR="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/></Relationships>";
+  var styles="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<w:styles xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii=\"Calibri\" w:hAnsi=\"Calibri\"/><w:sz w:val=\"20\"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\"><w:name w:val=\"Normal\"/></w:style></w:styles>";
+  var doc="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\"><w:body>"+bodyXml+"<w:sectPr><w:pgSz w:w=\"11906\" w:h=\"16838\"/><w:pgMar w:top=\"567\" w:right=\"567\" w:bottom=\"567\" w:left=\"567\"/></w:sectPr></w:body></w:document>";
+  var files=[{name:"[Content_Types].xml",data:u8(ct)},{name:"_rels/.rels",data:u8(rootR)},{name:"word/document.xml",data:u8(doc)},{name:"word/styles.xml",data:u8(styles)},{name:"word/_rels/document.xml.rels",data:u8(rels)}];
+  (images.files||[]).forEach(function(f){files.push({name:f.name,data:f.data})});
+  return zipStore(files)}
+function buildXlsx(sheetName,rows){ // rows:[[...]] ; nombres encodés en nombre
+  var ct="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/></Types>";
+  var r1="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>";
+  var wb="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\""+escX(sheetName)+"\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>";
+  var r2="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>";
+  var st="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><fonts count=\"2\"><font/><font><b/></font></fonts><fills count=\"1\"><fill/></fills><borders count=\"1\"><border/></borders><cellStyleXfs count=\"1\"><xf/></cellStyleXfs><cellXfs count=\"2\"><xf/><xf fontId=\"1\" applyFont=\"1\"/></cellXfs></styleSheet>";
+  function colRef(i){var s="";i++;while(i>0){var r=(i-1)%26;s=String.fromCharCode(65+r)+s;i=Math.floor((i-1)/26)+0;i=Math.floor((i-1)/26)}return s||"A"}
+  var sd="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>"+
+    rows.map(function(row,ri){return"<row r=\""+(ri+1)+"\">"+row.map(function(c,ci){
+      var ref=colRef(ci)+(ri+1);
+      if(typeof c==="number")return"<c r=\""+ref+"\"><v>"+c+"</v></c>";
+      return"<c r=\""+ref+"\" t=\"inlineStr\""+(ri===0?" s=\"1\"":"")+"><is><t>"+escX(c)+"</t></is></c>"}).join("")+"</row>"}).join("")+"</sheetData></worksheet>";
+  return zipStore([{name:"[Content_Types].xml",data:u8(ct)},{name:"_rels/.rels",data:u8(r1)},{name:"xl/workbook.xml",data:u8(wb)},{name:"xl/_rels/workbook.xml.rels",data:u8(r2)},{name:"xl/styles.xml",data:u8(st)},{name:"xl/worksheets/sheet1.xml",data:u8(sd)}])}
+function dl(bytes,name,mime){var blob=new Blob([bytes],{type:mime||"application/octet-stream"}),a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},800)}
+</script>
+<script>
+// ================== COUCHE MÉTIER ==================
+var LSK="pointpro_db_v1";
+var ROLES={admin:"Administrateur",directeur:"Directeur",rh:"Responsable RH",responsable:"Responsable de site",chef:"Chef d’équipe",pointeur:"Pointeur",comptable:"Comptable",auditeur:"Auditeur",ouvrier:"Ouvrier"};
+// Capacités : ce que chaque rôle peut faire dans l’application
+var PERM={admin:["manage","users","workers","scan","sessions","times","correct","claims","pay","reports","settings","audit"],
+directeur:["view","times","claims","pay","reports","audit","correct"],
+rh:["view","workers","times","correct","claims","pay","reports"],
+responsable:["view","workers","scan","sessions","times","correct","claims","reports"],
+chef:["view","scan","sessions","times","reports"],
+pointeur:["scan","sessions","view","anomaly"],
+comptable:["view","times","pay","reports"],
+auditeur:["view","audit","reports"],
+ouvrier:["self"]};
+function can(cap){var u=App.user();return u&&PERM[u.role]&&PERM[u.role].indexOf(cap)>=0}
+var SECTORS={
+btp:{label:"Bâtiment et travaux publics",t:{site:"Chantier",worker:"Ouvrier",team:"Équipe",chief:"Chef de chantier",assign:"Affectation"},kpi:["Heures chantier","Jours travaillés"]},
+securite:{label:"Sécurité et gardiennage",t:{site:"Site client",worker:"Agent",team:"Poste",chief:"Chef de poste",assign:"Prise de service"},kpi:["Heures de garde","Relèves"]},
+nettoyage:{label:"Nettoyage et entretien",t:{site:"Site client",worker:"Agent",team:"Équipe",chief:"Superviseur",assign:"Intervention"},kpi:["Heures d’intervention","Sites couverts"]},
+industrie:{label:"Industrie et production",t:{site:"Atelier",worker:"Opérateur",team:"Équipe",chief:"Chef d’atelier",assign:"Poste"},kpi:["Heures de production","Postes couverts"]},
+agriculture:{label:"Agriculture",t:{site:"Parcelle",worker:"Travailleur saisonnier",team:"Équipe",chief:"Chef d’équipe",assign:"Campagne"},kpi:["Journées de travail","Campagnes"]},
+agro:{label:"Agroalimentaire",t:{site:"Site",worker:"Opérateur",team:"Équipe",chief:"Chef d’équipe",assign:"Ligne"},kpi:["Heures","Journées"]},
+transport:{label:"Transport",t:{site:"Dépôt",worker:"Chauffeur",team:"Équipe",chief:"Responsable",assign:"Tournée"},kpi:["Heures","Journées"]},
+logistique:{label:"Logistique",t:{site:"Entrepôt",worker:"Agent",team:"Équipe",chief:"Responsable",assign:"Quai"},kpi:["Heures","Journées"]},
+manutention:{label:"Manutention",t:{site:"Site",worker:"Manutentionnaire",team:"Équipe",chief:"Chef d’équipe",assign:"Mission"},kpi:["Heures","Journées"]},
+commerce:{label:"Commerce et distribution",t:{site:"Magasin",worker:"Agent",team:"Équipe",chief:"Responsable",assign:"Service"},kpi:["Heures","Journées"]},
+hotellerie:{label:"Hôtellerie et restauration",t:{site:"Établissement",worker:"Agent",team:"Service",chief:"Chef de service",assign:"Service"},kpi:["Heures","Services"]},
+evenement:{label:"Événementiel",t:{site:"Site",worker:"Agent",team:"Équipe",chief:"Coordonnateur",assign:"Mission"},kpi:["Heures","Missions"]},
+maintenance:{label:"Maintenance et réparation",t:{site:"Site",worker:"Technicien",team:"Équipe",chief:"Responsable",assign:"Intervention"},kpi:["Heures","Interventions"]},
+telecom:{label:"Télécommunications",t:{site:"Site",worker:"Technicien",team:"Équipe",chief:"Responsable",assign:"Mission"},kpi:["Heures","Missions"]},
+immobilier:{label:"Immobilier",t:{site:"Site",worker:"Agent",team:"Équipe",chief:"Responsable",assign:"Mission"},kpi:["Heures","Journées"]},
+services:{label:"Services aux entreprises",t:{site:"Site client",worker:"Agent",team:"Équipe",chief:"Responsable",assign:"Mission"},kpi:["Heures","Journées"]},
+collectivite:{label:"Collectivités et administrations",t:{site:"Service",worker:"Agent",team:"Service",chief:"Responsable",assign:"Affectation"},kpi:["Heures","Journées"]},
+sante:{label:"Santé",t:{site:"Établissement",worker:"Agent",team:"Service",chief:"Responsable",assign:"Service"},kpi:["Heures","Services"]},
+education:{label:"Éducation",t:{site:"Établissement",worker:"Agent",team:"Équipe",chief:"Responsable",assign:"Service"},kpi:["Heures","Journées"]},
+autre:{label:"Autre secteur (personnalisable)",t:{site:"Site",worker:"Travailleur",team:"Équipe",chief:"Responsable",assign:"Affectation"},kpi:["Heures","Journées"]}};
+function uid(p){return(p||"")+"x"+Date.now().toString(36)+Math.random().toString(36).slice(2,8)}
+function hsh(s){var h=5381;for(var i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))>>>0;for(var r=0;r<800;r++){h^=h<<13;h>>>=0;h^=h>>17;h^=h<<5;h>>>=0}return h.toString(36)}
+function today(d){d=d||new Date();return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2)}
+function nowTime(d){d=d||new Date();return("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2)}
+function dLabel(iso){if(!iso)return"—";var p=iso.split("-");return p[2]+"/"+p[1]+"/"+p[0]}
+function wLabel(iso){var d=new Date(iso+"T00:00:00");return["dim","lun","mar","mer","jeu","ven","sam"][d.getDay()]}
+function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+// ---- base ----
+var DB;
+function dbLoad(){try{DB=JSON.parse(localStorage.getItem(LSK))||null}catch(e){DB=null}
+  if(!DB||!DB.companies){DB={companies:[],users:[],workers:[],badges:[],sites:[],teams:[],sessions:[],events:[],claims:[],payments:[],audit:[],notifs:[],meta:{ver:1}};dbSave()}}
+function dbSave(){try{localStorage.setItem(LSK,JSON.stringify(DB))}catch(e){App.toast("⚠️ Stockage plein : exporte une sauvegarde","no")}}
+function sc(list){var cid=App.user()&&App.user().companyId;return list.filter(function(x){return x.companyId===cid})} // ISOLEMENT TENANT
+function audit(action,entity,entityId,before,after,motif){var u=App.user();
+  DB.audit.push({id:uid("a"),companyId:u?u.companyId:null,ts:new Date().toISOString(),actorId:u?u.id:null,actorName:u?u.name:"—",
+    action:action,entity:entity,entityId:entityId,before:before==null?null:JSON.stringify(before),after:after==null?null:JSON.stringify(after),motif:motif||""});
+  if(DB.audit.length>3000)DB.audit=DB.audit.slice(-2500);dbSave()}
+function notify(txt,kind){DB.notifs.unshift({id:uid("n"),companyId:App.user()?App.user().companyId:null,ts:new Date().toISOString(),txt:txt,kind:kind||"inf",read:false});
+  DB.notifs=DB.notifs.slice(0,200);dbSave()}
+// ---- sessions & événements de pointage ----
+var OPS={arrivee:"Arrivée",depart:"Départ",pauseDebut:"Début pause",pauseFin:"Fin pause"};
+function evKey(e){return e.workerId+"|"+e.date+"|"+e.type}
+function workerEvents(wId,date){return sc(DB.events).filter(function(e){return e.workerId===wId&&e.date===date}).sort(function(a,b){return a.time<b.time?-1:1})}
+// Calcul d’une journée : arrivee, pauses, depart, presence, effectif, retard, HS, nuit, incomplet
+function computeDay(wId,date){
+  var evs=workerEvents(wId,date),r={date:date,arrivee:null,depart:null,pauses:[],presence:0,pauseTot:0,effectif:0,retard:false,departAnticipe:false,hs:0,nuit:false,incomplet:false,events:evs};
+  var arr=evs.filter(function(e){return e.type==="arrivee"}),dep=evs.filter(function(e){return e.type==="depart"}),pd=evs.filter(function(e){return e.type==="pauseDebut"}),pf=evs.filter(function(e){return e.type==="pauseFin"});
+  if(arr.length)r.arrivee=arr[arr.length-1].time;
+  if(dep.length)r.depart=dep[dep.length-1].time;
+  var i=0,j=0;
+  while(i<pd.length||j<pf.length){var st=pd[i]?pd[i].time:null,en=pf[j]?pf[j].time:null;
+    if(st&&en&&en>=st){r.pauses.push([st,en]);i++;j++}else if(st&&!en){r.pauses.push([st,null]);i++}else if(en&&!st){j++}else{break}}
+  function mins(t){var p=t.split(":");return+p[0]*60+(+p1(p[1]))}
+  function p1(x){return x}
+  if(r.arrivee&&r.depart){var a=mins(r.arrivee),d=mins(r.depart);if(d<a)d+=1440; // passage minuit
+    r.presence=(d-a)/60;
+    r.pauses.forEach(function(p){if(p[1]){var s=mins(p[0]),e2=mins(p[1]);if(e2<s)e2+=1440;r.pauseTot+=(e2-s)/60}});
+    r.effectif=Math.max(0,r.presence-r.pauseTot);
+    var w=App.workerById(wId),st=w?(w.hStart||"08:00"):"08:00",et=w?(w.hEnd||"17:00"):"17:00";
+    if(a>mins(st))r.retard=true;
+    if(d<mins(et))r.departAnticipe=true;
+    var base=w?(+w.hsBase||8):8;
+    r.hs=Math.max(0,r.effectif-base);
+    var nightStart=21*60,nightEnd=6*60;
+    for(var t=a;t<d;t++){var mm=t%1440;if(mm>=nightStart||mm<nightEnd){r.nuit=true;break}}
+    if(r.pauses.some(function(p){return!p[1]}))r.incomplet=true;
+  }else if(r.arrivee||r.depart){r.incomplet=true}
+  if(r.pauses.some(function(p){return!p[1]})&&!r.depart)r.incomplet=true;
+  return r}
+function fmtH(h){var m=Math.round(h*60);return Math.floor(m/60)+"h"+("0"+(m%60)).slice(-2)}
+function fmM(n){return new Intl.NumberFormat("fr-FR").format(Math.round(n))+" F"}
+</script>
+<script>
+// ================== APPLICATION ==================
+var App={
+session:null,tab:"home",scan:{stream:null,detector:null,on:false,mode:"auto",siteId:null,count:0,ok:0,rej:0,last:null},
+user:function(){return this.session?DB.users.find(function(u){return u.id===App.session.userId}):null},
+me:function(){return this.user()},
+myCompany:function(){var u=this.user();return u?DB.companies.find(function(c){return c.id===u.companyId}):null},
+T:function(k){var c=this.myCompany();if(!c)return k;var s=SECTORS[c.sector]||SECTORS.autre;return s.t[k]||k},
+workerById:function(id){return DB.workers.find(function(w){return w.id===id})},
+siteById:function(id){return DB.sites.find(function(s){return s.id===id})},
+teamById:function(id){return DB.teams.find(function(t){return t.id===id})},
+badgeOf:function(wId){return sc(DB.badges).filter(function(b){return b.workerId===wId&&b.status==="active"})[0]},
+init:function(){dbLoad();
+  var el1=document.getElementById("login"),el2=document.getElementById("app");
+  if(!DB.companies.length){el1.style.display="block";el2.style.display="none";this.loginUI("setup")}
+  else{el1.style.display="block";el2.style.display="none";this.loginUI("login")}},
+loginUI:function(mode){var f=document.getElementById("loginForm");
+  if(mode==="setup"){f.innerHTML="<div class=\"card\"><h3>Création de ton entreprise</h3>"+
+    "<label class=\"fld\">Nom commercial</label><input id=\"co_nom\" placeholder=\"Ex : Ndao BTP\">"+
+    "<label class=\"fld\">Secteur d’activité</label><select id=\"co_sect\">"+Object.keys(SECTORS).map(function(k){return"<option value=\""+k+"\">"+SECTORS[k].label+"</option>"}).join("")+"</select>"+
+    "<label class=\"fld\">Ton nom (administrateur)</label><input id=\"co_adm\" placeholder=\"Ex : Mohamad Ndao\">"+
+    "<label class=\"fld\">Téléphone</label><input id=\"co_tel\" type=\"tel\" placeholder=\"+221 77 000 00 00\">"+
+    "<label class=\"fld\">Code PIN (4 à 6 chiffres)</label><input id=\"co_pin\" type=\"password\" inputmode=\"numeric\" placeholder=\"****\">"+
+    "<div style=\"margin-top:16px\"><button class=\"bigbtn\" onclick=\"App.setupCompany()\">CRÉER MON ENTREPRISE</button></div></div>"}
+  else{f.innerHTML="<div class=\"card\"><h3>Connexion</h3>"+
+    "<label class=\"fld\">Téléphone</label><input id=\"lg_tel\" type=\"tel\" placeholder=\"+221 77 000 00 00\">"+
+    "<label class=\"fld\">Code PIN</label><input id=\"lg_pin\" type=\"password\" inputmode=\"numeric\" placeholder=\"****\">"+
+    "<div style=\"margin-top:16px\"><button class=\"bigbtn\" onclick=\"App.doLogin()\">SE CONNECTER</button></div>"+
+    "<div class=\"mut small\" style=\"margin-top:12px;text-align:center\">Tes données restent sur cet appareil.</div></div>"}},
+setupCompany:function(){var nom=val("co_nom"),adm=val("co_adm"),tel=val("co_tel"),pin=val("co_pin"),sect=val("co_sect");
+  if(!nom||!adm||!tel||!/^\d{4,6}$/.test(pin)){this.toast("Remplis tous les champs ; PIN = 4 à 6 chiffres","no");return}
+  var cid=uid("c");
+  DB.companies.push({id:cid,name:nom,sector:sect,raison:"",ninea:"",rccm:"",adresse:"",ville:"",pays:"Sénégal",tel1:tel,tel2:"",email:"",web:"",resp:adm,logo:"",createdAt:today()});
+  DB.users.push({id:uid("u"),companyId:cid,name:adm,tel:tel,role:"admin",pin:hsh(pin),active:true,createdAt:today(),workerId:null});
+  DB.sites.push({id:uid("s"),companyId:cid,nom:"Site principal",adresse:"",resp:"",statut:"actif",createdAt:today()});
+  dbSave();this.toast("Entreprise créée ✅ Connecte-toi","ok");this.loginUI("login")},
+doLogin:function(){var tel=val("lg_tel").trim(),pin=val("lg_pin");
+  var u=DB.users.find(function(x){return x.tel===tel&&x.pin===hsh(pin)&&x.active});
+  if(!u){this.toast("Téléphone ou PIN incorrect","no");return}
+  this.session={userId:u.id};localStorage.setItem("pointpro_session",JSON.stringify(this.session));
+  document.getElementById("login").style.display="none";document.getElementById("app").style.display="block";
+  this.tab=u.role==="ouvrier"?"self":"home";this.scan.siteId=this.firstSite();this.render()},
+firstSite:function(){var s=sc(DB.sites)[0];return s?s.id:null},
+setScanSite:function(id){this.scan.siteId=id},
+logout:function(){localStorage.removeItem("pointpro_session");this.session=null;
+  document.getElementById("app").style.display="none";document.getElementById("login").style.display="block";this.loginUI("login")},
+resume:function(){try{var s=JSON.parse(localStorage.getItem("pointpro_session"));if(s&&DB.users.find(function(u){return u.id===s.userId})){this.session=s;return true}}catch(e){}return false},
+toast:function(txt,kind){var t=document.createElement("div");t.textContent=txt;
+  t.style.cssText="position:fixed;left:50%;bottom:90px;transform:translateX(-50%);z-index:200;padding:12px 20px;border-radius:12px;font-weight:700;max-width:86vw;text-align:center;"+
+  (kind==="ok"?"background:#064e3b;color:#6ee7b7":kind==="no"?"background:#7f1d1d;color:#fca5a5":"background:#164e63;color:#67e8f9");
+  document.body.appendChild(t);setTimeout(function(){t.remove()},2600)},
+sheet:function(html){document.getElementById("sheetBody").innerHTML="<div class=\"grip\"></div>"+html;document.getElementById("sheet").classList.add("on")},
+closeSheet:function(){document.getElementById("sheet").classList.remove("on")},
+nav:function(){var tabs=[["home","🏠","Accueil"],["scan","📷","Pointer"],["workers","👥","Équipe"],["reports","📊","Rapports"],["more","⚙️","Plus"]];
+  if(this.user()&&this.user().role==="ouvrier")tabs=[["self","👤","Mon espace"]];
+  document.getElementById("tabbar").innerHTML=tabs.map(function(t){return"<div class=\"tab"+(App.tab===t[0]?" on":"")+"\" onclick=\"App.setTab('"+t[0]+"')\"><div class=\"ic\">"+t[1]+"</div>"+t[2]+"</div>"}).join("")},
+setTab:function(t){if(this.scan.on)this.stopScan();this.tab=t;this.render()},
+render:function(){try{
+  var u=this.user();if(!u)return;
+  var sites=sc(DB.sites);
+  document.getElementById("siteSel").innerHTML=sites.map(function(s){return"<option value=\""+s.id+"\""+(App.scan.siteId===s.id?" selected":"")+">"+esc(s.nom)+"</option>"}).join("");
+  this.nav();
+  var V={home:this.vHome,scan:this.vScan,workers:this.vWorkers,reports:this.vReports,more:this.vMore,self:this.vSelf,tests:this.vTests,audit:this.vAudit,guides:this.vGuides,claims:this.vClaims,pay:this.vPay,times:this.vTimes,settings:this.vSettings,users:this.vUsers,sites:this.vSites};
+  document.getElementById("view").innerHTML=V[this.tab].call(this);
+  if(this.tab==="scan"&&this.scan.on)this.scanLoop();
+}catch(err){document.getElementById("view").innerHTML="<div class=\"msg no\">⚠️ Erreur d’affichage : "+esc(err.message)+" — réessaie, tes données sont sauvegardées.</div>"}},
+sec:function(t,sub){return"<div style=\"margin-bottom:14px\"><div class=\"h\">"+t+"</div><div class=\"mut small\">"+sub+"</div></div>"},
+notifCount:function(){var u=this.user();return DB.notifs.filter(function(n){return n.companyId===u.companyId&&!n.read}).length},
+// ---------- TABLEAU DE BORD ----------
+vHome:function(){var u=this.user();if(!can("view")&&u.role!=="ouvrier")return this.deny();
+  var d=today(),ws=sc(DB.workers).filter(function(w){return w.statut==="actif"}),self=this;
+  var days=ws.map(function(w){return computeDay(w.id,d)});
+  var presents=days.filter(function(r){return r.arrivee}).length;
+  var absents=ws.length-presents;
+  var retards=days.filter(function(r){return r.retard}).length;
+  var hsTot=days.reduce(function(s,r){return s+r.hs},0);
+  var hTot=days.reduce(function(s,r){return s+r.effectif},0);
+  var inc=days.filter(function(r){return r.incomplet}).length;
+  var claimsOpen=sc(DB.claims).filter(function(c){return["nouvelle","encours","attente"].indexOf(c.status)>=0}).length;
+  var ym=d.slice(0,7),totPay=ws.reduce(function(s,w){return s+self.payOf(w,ym).estimated},0);
+  var n=this.notifCount();
+  return this.sec("Tableau de bord — "+dLabel(d),"Bienvenue "+esc(u.name)+" · "+ROLES[u.role])+
+  (n?"<div class=\"msg inf\" onclick=\"App.setTab('more')\" style=\"cursor:pointer\">🔔 "+n+" notification(s) non lue(s) — touche pour voir</div>":"")+
+  "<div class=\"kpi\">"+this.k("Travailleurs actifs",ws.length)+this.k("Présents aujourd’hui",presents,"gr")+
+  this.k("Absents présumés",absents,absents?"or":"")+this.k("Retards",retards,retards?"or":"")+
+  this.k("Heures travaillées",fmtH(hTot),"gr")+this.k("Heures supp.",fmtH(hsTot))+this.k("Journées incomplètes",inc,inc?"no":"")+
+  this.k("Réclamations ouvertes",claimsOpen,claimsOpen?"or":"")+this.k("Total à payer ("+ym+")",fmM(totPay),"gr")+"</div>"+
+  "<div class=\"grid2\"><button class=\"btn primary\" onclick=\"App.setTab('scan')\">📷 Ouvrir le scan continu</button>"+
+  "<button class=\"btn\" onclick=\"App.setTab('workers')\">👥 Gérer l’équipe</button></div>"+
+  "<div class=\"card\" style=\"margin-top:14px\"><h3>Activité récente</h3>"+this.recentList()+"</div>"},
+k:function(t,v,c){return"<div class=\"stat\"><div class=\"t\">"+t+"</div><div class=\"v\" style=\"color:"+(c==="gr"?"var(--gr)":c==="or"?"var(--or)":c==="no"?"var(--rd)":"var(--txt)")+"\">"+v+"</div></div>"},
+recentList:function(){var evs=sc(DB.events).slice().sort(function(a,b){return b.ts<a.ts?1:-1}).slice(0,8);
+  if(!evs.length)return"<div class=\"mut small\">Aucun pointage enregistré pour le moment.</div>";
+  return evs.map(function(e){var w=App.workerById(e.workerId),t=e.anomaly?"or":"ok";
+    return"<div class=\"lrow\"><div class=\"avatar\">"+(w&&w.photo?"<img src=\""+w.photo+"\">":"👷")+"</div><div class=\"grow\"><div class=\"nm\">"+esc(w?w.prenom+" "+w.nom:"?")+"</div><div class=\"sub\"><b>"+wLabel(e.date)+" "+dLabel(e.date)+"</b> · "+OPS[e.type]+" · "+e.time+" · "+esc(App.siteById(e.sessionSiteId)?App.siteById(e.sessionSiteId).nom:"")+(e.anomaly?" · <b style='color:var(--or)'>anomalie</b>":"")+(e.offline?" · hors ligne":"")+"</div></div><span class=\"pill "+t+"\">"+(e.anomaly?"⚠":"✓")+"</span></div>"}).join("")},
+deny:function(){return"<div class=\"msg no\">⛔ Ton rôle ne permet pas d’accéder à cet espace.</div>"},
+vSelf:function(){var u=this.user(),w=this.workerById(u.workerId);if(!w)return this.deny();
+  var d=today(),r=computeDay(w.id,d);
+  return this.sec("Mon espace — "+esc(w.prenom+" "+w.nom),"Consulte tes heures et tes rémunérations")+
+  "<div class=\"kpi\">"+this.k("Statut aujourd’hui",r.arrivee?(r.depart?"Terminé":"En service"):"Non pointé")+this.k("Heures aujourd’hui",fmtH(r.effectif))+"</div>"+
+  "<div class=\"card\"><h3>Mes heures (jour · quinzaine · mois)</h3>"+this.hoursTabsHtml(w)+"</div>"+
+  "<div class=\"mut small\" style=\"margin-top:4px\">Contrat : du "+dLabel(w.dateDebut)+(w.dateFin?" au "+dLabel(w.dateFin):" — en cours")+" · "+w.mode+" · "+fmM(w.tarif)+(w.mode==="journalier"?" / jour":"")+"</div>"+
+  "<div class=\"card\" style=\"margin-top:10px\"><h3>Mes 7 derniers jours</h3><table class=\"d\"><tr><th>Jour</th><th>Date</th><th>Arrivée</th><th>Départ</th><th>Effectif</th><th>HS</th></tr>"+
+  this.lastDays(w.id,7).map(function(rd){return"<tr><td>"+wLabel(rd.date)+"</td><td>"+dLabel(rd.date)+"</td><td>"+(rd.arrivee||"—")+"</td><td>"+(rd.depart||"—")+"</td><td>"+(rd.arrivee?fmtH(rd.effectif):"—")+"</td><td>"+(rd.hs?fmtH(rd.hs):"—")+"</td></tr>"}).join("")+"</table></div>"+
+  "<div class=\"grid2\"><button class=\"btn\" onclick=\"App.newClaim('"+w.id+"')\">✋ Signaler une erreur</button><button class=\"btn\" onclick=\"App.myReleve('"+w.id+"')\">📄 Mon relevé</button></div>"},
+lastDays:function(wId,n){var out=[],d=new Date();for(var i=0;i<n;i++){out.push(computeDay(wId,today(d)));d.setDate(d.getDate()-1)}return out},
+myReleve:function(wId){this.reportsDocx("releve",[wId],today(),today())},
+// ---- agrégats d’heures : jour / quinzaine / mois ----
+hoursRange:function(wId,from,to){var d=new Date(from+"T00:00:00"),end=new Date(to+"T00:00:00"),tot=0,hs=0,days=0;
+  while(d<=end){var dt=today(d),r=this.computeDayC(wId,dt);if(r.arrivee){tot+=r.effectif;hs+=r.hs;days++}d.setDate(d.getDate()+1)}
+  return{hours:tot,hs:hs,days:days}},
+quinzRange:function(d){var p=d.split("-"),y=+p[0],m=+p[1],day=+p[2];
+  if(day<=15)return{from:y+"-"+("0"+m).slice(-2)+"-01",to:y+"-"+("0"+m).slice(-2)+"-15",label:"1re quinzaine"};
+  var last=new Date(y,m,0).getDate();
+  return{from:y+"-"+("0"+m).slice(-2)+"-16",to:y+"-"+("0"+m).slice(-2)+"-"+("0"+last).slice(-2),label:"2e quinzaine"}},
+hoursTabsHtml:function(w){var d=today(),q=this.quinzRange(d),ym=d.slice(0,7);
+  var hj=this.hoursRange(w.id,d,d),hq=this.hoursRange(w.id,q.from,q.to),hm=this.hoursRange(w.id,ym+"-01",d);
+  var start=w.dateDebut&&w.dateDebut>d?w.dateDebut:d;
+  return"<div class=\"kpi\">"+this.k("Jour ("+wLabel(d)+" "+dLabel(d)+")",fmtH(hj.hours))+
+  this.k(q.label+" ("+dLabel(q.from)+" → "+dLabel(q.to)+")",fmtH(hq.hours))+
+  this.k("Mois ("+ym+")",fmtH(hm.hours)+" · "+hm.days+" j")+"</div>"+
+  (w.dateFin&&w.dateFin<d?"<div class=\"msg no\" style=\"margin-top:8px\">Départ le "+dLabel(w.dateFin)+" : les pointages postérieurs ne sont plus comptés.</div>":w.dateDebut&&w.dateDebut>d?"<div class=\"msg wn\" style=\"margin-top:8px\">Premier jour de travail : "+dLabel(w.dateDebut)+"</div>":"")}
+};
+function val(id){var e=document.getElementById(id);return e?e.value:""}
+</script>
+<script>
+// ================== ÉQUIPE / BADGES ==================
+Object.assign(App,{
+vWorkers:function(){if(!can("workers"))return this.deny();
+  var self=this,ws=sc(DB.workers).slice().sort(function(a,b){return(a.nom+a.prenom)<(b.nom+b.prenom)?-1:1}),d=today();
+  return this.sec("Équipe — "+this.T("worker")+"s","Chaque personne a une fiche, un identifiant unique et un badge QR")+
+  "<button class=\"bigbtn\" onclick=\"App.addWorkerSheet()\">➕ Ajouter un "+this.T("worker").toLowerCase()+"</button>"+
+  "<div class=\"sw\" style=\"margin-top:12px\"><div class=\"chip on\">Tous ("+ws.length+")</div></div>"+
+  ws.map(function(w){var r=computeDay(w.id,d),b=self.badgeOf(w.id);
+    return"<div class=\"lrow\" onclick=\"App.workerSheet('"+w.id+"')\" style=\"cursor:pointer\">"+
+    "<div class=\"avatar\">"+(w.photo?"<img src=\""+w.photo+"\">":"👷")+"</div>"+
+    "<div class=\"grow\"><div class=\"nm\">"+esc(w.prenom+" "+w.nom)+" <span class=\"pill "+(w.statut==="actif"?"ok":"no")+"\">"+w.statut+"</span></div>"+
+    "<div class=\"sub\">"+esc(w.matricule)+" · "+esc(w.poste||"—")+" · "+esc(self.siteById(w.siteId)?self.siteById(w.siteId).nom:"sans "+self.T("site").toLowerCase())+"</div></div>"+
+    "<div style=\"text-align:right\"><div class=\"small\" style=\"font-weight:800\">"+(r.arrivee?(r.depart?"✓":"🟢"):"—")+"</div><div class=\"mut small\">"+(r.arrivee?fmtH(r.effectif):"")+"</div></div></div>"}).join("")+
+  (!ws.length?"<div class=\"msg inf\">Aucun travailleur enregistré. Touche « Ajouter un travailleur » : photo, nom, métier, site — c’est tout.</div>":"")},
+nextMat:function(){var n=sc(DB.workers).length+1;return"PP-"+new Date().getFullYear().toString().slice(-2)+"-"+("000"+n).slice(-4)},
+addWorkerSheet:function(){var sites=sc(DB.sites);
+  this.sheet("<div class=\"h\" style=\"margin-bottom:10px\">Nouveau "+this.T("worker")+"</div>"+
+  "<div style=\"text-align:center;margin-bottom:12px\"><div class=\"avatar\" style=\"width:88px;height:88px;margin:0 auto\" id=\"phPrev\">📷</div>"+
+  "<input type=\"file\" id=\"w_photo\" accept=\"image/*\" capture=\"environment\" style=\"display:none\" onchange=\"App.takePhoto(this)\">"+
+  "<button class=\"btn sm\" style=\"margin-top:8px\" onclick=\"document.getElementById('w_photo').click()\">📸 Prendre la photo</button></div>"+
+  "<label class=\"fld\">Nom *</label><input id=\"w_nom\" placeholder=\"Ex : Diop\">"+
+  "<label class=\"fld\">Prénom *</label><input id=\"w_prenom\" placeholder=\"Ex : Mamadou\">"+
+  "<label class=\"fld\">"+this.T("worker")+" / métier</label><input id=\"w_poste\" placeholder=\"Ex : Maçon / Agent / Opérateur\">"+
+  "<label class=\"fld\">"+this.T("site")+" d’affectation</label><select id=\"w_site\">"+sites.map(function(s){return"<option value=\""+s.id+"\">"+esc(s.nom)+"</option>"}).join("")+"</select>"+
+  "<div class=\"grid2\"><div><label class=\"fld\">Mode de paie</label><select id=\"w_mode\"><option value=\"journalier\">Journalier (par jour)</option><option value=\"horaire\">Horaire</option><option value=\"mensuel\">Mensuel</option><option value=\"forfait\">Forfait</option></select></div>"+
+  "<div><label class=\"fld\">Montant à payer par jour (F CFA)</label><input id=\"w_tarif\" type=\"number\" inputmode=\"numeric\" value=\"0\"></div></div>"+
+  "<div class=\"grid2\"><div><label class=\"fld\">Premier jour de travail *</label><input id=\"w_dd\" type=\"date\" value=\""+today()+"\"></div>"+
+  "<div><label class=\"fld\">Jour de départ (si connu)</label><input id=\"w_df\" type=\"date\"></div></div>"+
+  "<div class=\"grid2\"><div><label class=\"fld\">Heure début service</label><input id=\"w_hs\" type=\"time\" value=\"08:00\"></div>"+
+  "<div><label class=\"fld\">Heure fin service</label><input id=\"w_he\" type=\"time\" value=\"17:00\"></div></div>"+
+  "<div style=\"margin-top:16px\" class=\"grid2\"><button class=\"btn primary\" onclick=\"App.saveWorker()\">✔ Enregistrer</button>"+
+  "<button class=\"btn\" onclick=\"App.closeSheet()\">Annuler</button></div>")},
+takePhoto:function(inp){var f=inp.files&&inp.files[0];if(!f)return;
+  var rd=new FileReader();rd.onload=function(){var img=new Image();img.onload=function(){
+    var c=document.createElement("canvas"),max=400,sc2=Math.min(1,max/Math.max(img.width,img.height));
+    c.width=Math.round(img.width*sc2);c.height=Math.round(img.height*sc2);
+    c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+    App.newPhoto=c.toDataURL("image/jpeg",0.8);
+    var p=document.getElementById("phPrev");p.innerHTML="<img src=\""+App.newPhoto+"\" style='width:100%;height:100%;object-fit:cover'>"};img.src=rd.result};
+  rd.readAsDataURL(f)},
+saveWorker:function(){var nom=val("w_nom").trim(),pre=val("w_prenom").trim();
+  if(!nom||!pre){this.toast("Nom et prénom obligatoires","no");return}
+  if(!can("workers")){this.toast("⛔ Non autorisé","no");return}
+  var u=this.user(),cid=u.companyId;
+  var w={id:uid("w"),companyId:cid,matricule:this.nextMat(),nom:nom,prenom:pre,photo:this.newPhoto||null,sexe:"",tel:"",adresse:"",
+    poste:val("w_poste"),siteId:val("w_site"),teamId:null,resp:"",dateRecrut:today(),contrat:"",mode:val("w_mode"),tarif:+val("w_tarif")||0,
+    dateDebut:val("w_dd")||today(),dateFin:val("w_df")||null,
+    hStart:val("w_hs")||"08:00",hEnd:val("w_he")||"17:00",hsBase:8,statut:"actif",notes:"",createdAt:today()};
+  DB.workers.push(w);
+  var tok=uid("tk");
+  DB.badges.push({id:uid("b"),companyId:cid,workerId:w.id,token:tok,status:"active",createdAt:today(),revokedAt:null,prints:0});
+  audit("create","worker",w.id,null,w,"");
+  dbSave();this.newPhoto=null;this.closeSheet();
+  this.toast(w.prenom+" "+w.nom+" enregistré · badge créé ✅","ok");
+  this.workerSheet(w.id,true)},
+workerSheet:function(id,isNew){var w=this.workerById(id);if(!w)return;
+  var b=this.badgeOf(w.id),sites=sc(DB.sites);
+  var qr=b?qrDataUrl(b.token,6):"";
+  this.sheet("<div style=\"display:flex;gap:12px;align-items:center\"><div class=\"avatar\" style=\"width:64px;height:64px\">"+(w.photo?"<img src=\""+w.photo+"\">":"👷")+"</div>"+
+  "<div><div class=\"h\" style=\"font-size:17px\">"+esc(w.prenom+" "+w.nom)+"</div><div class=\"mut small\">"+esc(w.matricule)+" · "+esc(w.poste||"—")+" · "+esc(this.siteById(w.siteId)?this.siteById(w.siteId).nom:"—")+"</div>"+
+  "<div class=\"mut small\">Du <b>"+dLabel(w.dateDebut)+"</b>"+(w.dateFin?" au <b>"+dLabel(w.dateFin)+"</b>":" · en activité")+"</div>"+
+  "<span class=\"pill "+(b?"ok":"no")+"\">badge "+(b?"actif":"révoqué")+"</span></div></div>"+
+  "<div class=\"card\" style=\"margin-top:12px\"><h3>Heures travaillées</h3>"+this.hoursTabsHtml(w)+"</div>"+
+  "<div class=\"card\" style=\"margin-top:14px\"><h3>Badge d’identification</h3>"+this.badgeHtml(w)+
+  "<div class=\"grid2\" style=\"margin-top:12px\">"+
+  "<button class=\"btn sm\" onclick=\"App.badgeDocx('"+w.id+"')\">📄 Word (.docx)</button>"+
+  "<button class=\"btn sm\" onclick=\"App.printBadges(['"+w.id+"'])\">🖨️ Imprimer / PDF</button></div></div>"+
+  "<div class=\"grid2\"><button class=\"btn sm\" onclick=\"App.editWorkerSheet('"+w.id+"')\">✏️ Modifier</button>"+
+  "<button class=\"btn sm\" onclick=\"App.toggleWorker('"+w.id+"')\">"+(w.statut==="actif"?"🚫 Suspendre":"✔ Réactiver")+"</button>"+
+  "<button class=\"btn sm warn\" onclick=\"App.renewBadge('"+w.id+"')\">🔄 Nouveau badge</button>"+
+  "<button class=\"btn sm\" onclick=\"App.releve('"+w.id+"')\">📊 Relevé 7 jours</button></div>"+
+  (isNew?"<div class=\"msg ok\" style=\"margin-top:12px\">🎉 Fiche créée : identifiant <b>"+esc(w.matricule)+"</b> et QR Code générés automatiquement. Imprime le badge et il est immédiatement utilisable au scanner.</div>":""))},
+badgeHtml:function(w){var c=this.myCompany(),b=this.badgeOf(w.id);
+  var qr=b?qrDataUrl(b.token,5):"";
+  return"<div class=\"badge-card prbadge\" style=\"margin:0 auto\"><div class=\"badge-left\">"+
+  (w.photo?"<img src=\""+w.photo+"\">":"<div class=\"ph\">PHOTO</div>")+
+  "<div class=\"fn\" style=\"text-align:center;font-size:8px\">"+esc(w.matricule)+"</div></div>"+
+  "<div class=\"badge-right\"><div class=\"co\">"+esc(c?c.name:"")+(c&&c.ville?" · "+esc(c.ville):"")+"</div>"+
+  "<div><div class=\"nm\">"+esc(w.nom+" "+w.prenom)+"</div><div class=\"fn\">"+esc(w.poste||this.T("worker"))+"</div></div>"+
+  "<div class=\"qr\">"+(b?"<img src=\""+qr+"\">":"<div class=\"mut small\">Badge révoqué</div>")+
+  "<div class=\"hint\">Badge officiel.<br>À présenter au pointage.<br>En cas de perte, prévenir le responsable.</div></div></div></div>"},
+editWorkerSheet:function(id){var w=this.workerById(id),sites=sc(DB.sites);
+  this.sheet("<div class=\"h\" style=\"margin-bottom:10px\">Modifier la fiche</div>"+
+  "<label class=\"fld\">Nom</label><input id=\"e_nom\" value=\""+esc(w.nom)+"\"><label class=\"fld\">Prénom</label><input id=\"e_prenom\" value=\""+esc(w.prenom)+"\">"+
+  "<label class=\"fld\">Métier / poste</label><input id=\"e_poste\" value=\""+esc(w.poste||"")+"\">"+
+  "<label class=\"fld\">"+this.T("site")+"</label><select id=\"e_site\">"+sites.map(function(s){return"<option value=\""+s.id+"\""+(s.id===w.siteId?" selected":"")+">"+esc(s.nom)+"</option>"}).join("")+"</select>"+
+  "<div class=\"grid2\"><div><label class=\"fld\">Mode de paie</label><select id=\"e_mode\">"+["journalier","horaire","mensuel","forfait"].map(function(m){return"<option"+(m===w.mode?" selected":"")+">"+m+"</option>"}).join("")+"</select></div>"+
+  "<div><label class=\"fld\">Montant à payer par jour (F CFA)</label><input id=\"e_tarif\" type=\"number\" value=\""+w.tarif+"\"></div></div>"+
+  "<div class=\"grid2\"><div><label class=\"fld\">Premier jour de travail</label><input id=\"e_dd\" type=\"date\" value=\""+(w.dateDebut||"")+"\"></div>"+
+  "<div><label class=\"fld\">Jour de départ</label><input id=\"e_df\" type=\"date\" value=\""+(w.dateFin||"")+"\"></div></div>"+
+  "<div class=\"grid2\"><div><label class=\"fld\">Début service</label><input id=\"e_hs\" type=\"time\" value=\""+w.hStart+"\"></div><div><label class=\"fld\">Fin service</label><input id=\"e_he\" type=\"time\" value=\""+w.hEnd+"\"></div></div>"+
+  "<label class=\"fld\">Téléphone</label><input id=\"e_tel\" value=\""+esc(w.tel||"")+"\">"+
+  "<div style=\"margin-top:16px\" class=\"grid2\"><button class=\"btn primary\" onclick=\"App.saveEditWorker('"+w.id+"')\">✔ Enregistrer</button><button class=\"btn\" onclick=\"App.closeSheet()\">Annuler</button></div>")},
+saveEditWorker:function(id){var w=this.workerById(id);if(!w)return;
+  var before={nom:w.nom,prenom:w.prenom,poste:w.poste,siteId:w.siteId,tarif:w.tarif};
+  w.nom=val("e_nom")||w.nom;w.prenom=val("e_prenom")||w.prenom;w.poste=val("e_poste");w.siteId=val("e_site");
+  w.mode=val("e_mode");w.tarif=+val("e_tarif")||0;w.hStart=val("e_hs")||w.hStart;w.hEnd=val("e_he")||w.hEnd;w.tel=val("e_tel");
+  w.dateDebut=val("e_dd")||w.dateDebut||today();w.dateFin=val("e_df")||null;
+  audit("update","worker",id,before,{nom:w.nom,prenom:w.prenom,poste:w.poste,siteId:w.siteId,tarif:w.tarif},"");
+  dbSave();this.closeSheet();this.toast("Fiche mise à jour","ok");this.render()},
+toggleWorker:function(id){var w=this.workerById(id);w.statut=w.statut==="actif"?"suspendu":"actif";
+  audit("status","worker",id,null,{statut:w.statut},"");dbSave();this.toast("Statut : "+w.statut,"ok");this.closeSheet();this.render()},
+renewBadge:function(id){var w=this.workerById(id);
+  if(!confirm("Créer un nouveau badge ? L’ancien QR Code sera révoqué et ne permettra plus de pointer."))return;
+  sc(DB.badges).forEach(function(b){if(b.workerId===id){b.status="revoked";b.revokedAt=today()}});
+  var tok=uid("tk");
+  DB.badges.push({id:uid("b"),companyId:this.user().companyId,workerId:id,token:tok,status:"active",createdAt:today(),revokedAt:null,prints:0});
+  audit("renew","badge",id,null,{token:tok},"Renouvellement badge");
+  notify("Badge renouvelé pour "+w.prenom+" "+w.nom,"wn");
+  dbSave();this.closeSheet();this.workerSheet(id);this.toast("Nouveau badge actif ✅","ok")},
+releve:function(id){this.reportsDocx("releve",[id],this.dateAdd(today(),-6),today())},
+dateAdd:function(iso,n){var d=new Date(iso+"T00:00:00");d.setDate(d.getDate()+n);return today(d)},
+// ---------- EXPORT BADGE WORD (.docx réel, dimensions exactes 85,6 × 54 mm) ----------
+badgeTableXml:function(w,ridQ,ridP,ridL){var c=this.myCompany(),b=this.badgeOf(w.id);
+  var mtw=mmTw(85.6),mh=mmTw(54);
+  function p(run){return"<w:p><w:pPr><w:spacing w:after=\"0\" w:line=\"0\" w:lineRule=\"exact\"/></w:pPr>"+(run||"")+"</w:p>"}
+  function t(s,sz,bold,color){return"<w:r><w:rPr>"+(bold?"<w:b/>":"")+"<w:color w:val=\""+(color||"1e293b")+"\"/><w:sz w:val=\""+sz+"\"/></w:rPr><w:t>"+escX(s)+"</w:t></w:r>"}
+  // disposition : table à 1 ligne, 3 colonnes (photo 22mm | identité | QR 22mm)
+  return"<w:tbl><w:tblPr><w:tblW w:w=\""+mtw+"\" w:type=\"dxa\"/><w:tblLayout w:type=\"fixed\"/>"+
+  "<w:tblBorders>"+["top","left","bottom","right"].map(function(s){return"<w:"+s+" w:val=\"single\" w:sz=\"12\" w:color=\"1e293b\"/>"}).join("")+"</w:tblBorders></w:tblPr>"+
+  "<w:tblGrid><w:gridCol w:w=\""+mmTw(26)+"\"/><w:gridCol w:w=\""+(mtw-mmTw(26)-mmTw(24))+"\"/><w:gridCol w:w=\""+mmTw(24)+"\"/></w:tblGrid>"+
+  "<w:tr><w:trPr><w:trHeight w:val=\""+mh+"\" w:hRule=\"exact\"/></w:trPr>"+
+  // photo
+  "<w:tc><w:tcPr><w:tcW w:w=\""+mmTw(26)+"\" w:type=\"dxa\"/><w:shd w:val=\"clear\" w:fill=\"0e7490\"/></w:tcPr>"+
+  p(ridP?docxImg(ridP,20,26):t("",10))+p(t(escX(w.matricule),11,true,"ffffff"))+
+  "</w:tc>"+
+  // identité
+  "<w:tc><w:tcPr><w:tcW w:w=\""+(mtw-mmTw(26)-mmTw(24))+"\" w:type=\"dxa\"/></w:tcPr>"+
+  p((ridL?docxImg(ridL,9,5):"")+t(c?c.name:"",9,true,"0e7490"))+
+  p(t(w.nom+" "+w.prenom,17,true))+p(t(w.poste||"",11,false,"475569"))+
+  p(t("ID : "+w.matricule,10,true,"334155"))+
+  "</w:tc>"+
+  // QR
+  "<w:tc><w:tcPr><w:tcW w:w=\""+mmTw(24)+"\" w:type=\"dxa\"/></w:tcPr>"+
+  p(ridQ?docxImg(ridQ,21,21):"")+p(t("POINTPRO",8,true,"94a3b8"))+
+  "</w:tc></w:tr></w:tbl>"},
+docxForBadges:function(list){var self=this,rels="",files=[],rid=100;
+  var xml="";
+  list.forEach(function(w,i){var b=self.badgeOf(w.id);
+    var rq="rId"+(rid++),rp="rId"+(rid++),rl="rId"+(rid++);
+    rels+="<Relationship Id=\""+rq+"\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"media/qr"+i+".png\"/>";
+    files.push({name:"word/media/qr"+i+".png",data:qrPng(b.token,10)});
+    if(w.photo){var b64=w.photo.split(",")[1];rels+="<Relationship Id=\""+rp+"\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"media/ph"+i+".jpeg\"/>";
+      files.push({name:"word/media/ph"+i+".jpeg",data:b64dec(b64)})}else rp=null;
+    var c=self.myCompany();
+    if(c&&c.logo){var l64=c.logo.split(",")[1];rels+="<Relationship Id=\""+rl+"\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"media/lg"+i+".png\"/>";
+      files.push({name:"word/media/lg"+i+".png",data:b64dec(l64)})}else rl=null;
+    xml+=self.badgeTableXml(w,rq,rp,rl);
+    if(i<list.length-1)xml+="<w:p><w:pPr><w:spacing w:after=\"60\"/></w:pPr></w:p>"});
+  return buildDocx(xml,{rels:rels,files:files})},
+badgeDocx:function(id){var w=this.workerById(id);if(!w)return;
+  try{dl(this.docxForBadges([w]),"badge_"+w.matricule+".docx");this.toast("Badge Word téléchargé ✅","ok");this.closeSheet()}
+  catch(e){this.toast("Erreur export : "+e.message,"no")}},
+badgesSheetDocx:function(ids){var list=ids.map(function(id){return App.workerById(id)}).filter(Boolean);
+  try{dl(this.docxForBadges(list),"badges_planche_"+today()+".docx");this.toast(list.length+" badge(s) Word ✅","ok")}
+  catch(e){this.toast("Erreur export : "+e.message,"no")}},
+printBadges:function(ids){var self=this,list=ids.map(function(id){return self.workerById(id)}).filter(Boolean);
+  var html="<div style='max-width:800px;margin:auto'>"+list.map(function(w){return"<div style='width:85.6mm;height:54mm;margin:4mm auto'>"+self.badgeHtml(w)+"</div>"}).join("")+"</div>";
+  var w=window.open("","_blank");if(!w){this.toast("Autorise les fenêtres surgissantes","no");return}
+  w.document.write("<!doctype html><html><head><meta charset='utf-8'><title>Badges POINTPRO</title>"+
+  "<style>body{font-family:Arial;background:#fff;margin:10mm}@media print{.b{page-break-after:always}}</style></head><body>"+html.replace(/85\.6mm/g,"width:100%")+"</body></html>");
+  w.document.close();setTimeout(function(){w.print()},600)}
+});
+</script>
+<script>
+// ================== SCANNER & SESSIONS ==================
+Object.assign(App,{
+vScan:function(){if(!can("scan"))return this.deny();
+  var sites=sc(DB.sites),d=today();
+  var sess=this.todaySession();
+  return this.sec("Pointage — scan continu","Scanne successivement chaque badge : aucune manipulation entre les scans")+
+  "<div class=\"sw\"><div class=\"chip"+(this.scan.mode==="auto"?" on":"")+"\" onclick=\"App.setMode('auto')\">🤖 Auto</div>"+
+  ["arrivee","depart","pauseDebut","pauseFin"].map(function(m){return"<div class=\"chip"+(App.scan.mode===m?" on":"")+"\" onclick=\"App.setMode('"+m+"')\">"+OPS[m]+"</div>"}).join("")+"</div>"+
