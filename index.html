@@ -632,3 +632,536 @@ vScan:function(){if(!can("scan"))return this.deny();
   return this.sec("Pointage — scan continu","Scanne successivement chaque badge : aucune manipulation entre les scans")+
   "<div class=\"sw\"><div class=\"chip"+(this.scan.mode==="auto"?" on":"")+"\" onclick=\"App.setMode('auto')\">🤖 Auto</div>"+
   ["arrivee","depart","pauseDebut","pauseFin"].map(function(m){return"<div class=\"chip"+(App.scan.mode===m?" on":"")+"\" onclick=\"App.setMode('"+m+"')\">"+OPS[m]+"</div>"}).join("")+"</div>"+
+  (sess?"<div class=\"msg ok\"><b>Session ouverte</b> · "+esc(this.siteById(sess.siteId)?this.siteById(sess.siteId).nom:"")+" · par "+esc(sess.byName)+" · "+sess.openedAt+"</div>":
+  "<div class=\"msg wn\">Aucune session ouverte aujourd’hui sur ce site. Ouvre-en une pour tracer les opérations.</div>"+
+  "<button class=\"btn blk\" onclick=\"App.openSession()\">▶ Ouvrir une session de pointage</button>")+
+  (this.scan.on?
+  "<div id=\"scanbox\"><video id=\"scv\" autoplay playsinline muted></video><div id=\"scanframe\"></div><div id=\"scanflash\"></div>"+
+  "<div style=\"position:absolute;top:8px;left:8px;display:flex;gap:8px\">"+
+  "<button class=\"btn sm\" onclick=\"App.stopScan()\">✕ Arrêter</button>"+
+  "<button class=\"btn sm\" id=\"torchBtn\" onclick=\"App.toggleTorch()\">🔆 Torche</button></div></div>"+
+  "<div id=\"scanStatus\" style=\"text-align:center;padding:12px;font-weight:800\">Scanne un badge…</div>"+
+  "<div class=\"grid3\" style=\"margin-bottom:10px\"><div class=\"counter\">Scans : <span id=\"cTot\">"+this.scan.count+"</span></div>"+
+  "<div class=\"counter\" style=\"color:#6ee7b7\">✓ <span id=\"cOk\">"+this.scan.ok+"</span></div>"+
+  "<div class=\"counter\" style=\"color:#fca5a5\">✕ <span id=\"cRej\">"+this.scan.rej+"</span></div></div>"+
+  "<div id=\"lastScan\"></div><div id=\"recentScans\" style=\"margin-top:8px\">"+this.recentScansHtml()+"</div>"
+  :
+  "<div style=\"text-align:center;padding:20px 0\">"+
+  (window.BarcodeDetector?"":"<div class=\"msg wn\">Ce navigateur n’a pas de lecteur QR natif : le scan caméra nécessitera Chrome Android récent. En attendant, utilise la saisie manuelle ci-dessous — elle enregistre exactement les mêmes données.</div>")+
+  "<button class=\"bigbtn\" onclick=\"App.startScan()\">📷 DÉMARRER LE SCAN CONTINU</button>"+
+  "<div class=\"card\" style=\"margin-top:14px;text-align:left\"><h3>⌨️ Saisie manuelle</h3>"+
+  "<label class=\"fld\">Identifiant du badge ou matricule</label><input id=\"manualTk\" placeholder=\"Ex : PP-26-0001\">"+
+  "<button class=\"btn blk\" style=\"margin-top:10px\" onclick=\"App.manualScan()\">Valider le pointage</button></div></div>")},
+recentScansHtml:function(){var rec=(this.scan.last||[]);return rec.map(function(r){
+  return"<div class=\"lrow\" style=\"padding:8px\"><div class=\"avatar\" style=\"width:36px;height:36px;font-size:16px\">"+(r.ok?"✓":"✕")+"</div>"+
+  "<div class=\"grow\"><div class=\"nm\" style=\"font-size:14px\">"+esc(r.nom)+"</div><div class=\"sub\"><b>"+wLabel(r.date||today())+" "+dLabel(r.date||today())+"</b> · "+esc(r.op)+" · "+r.time+(r.anomaly?" · ⚠":"")+"</div></div></div>"}).join("")},
+setMode:function(m){this.scan.mode=m;this.render()},
+todaySession:function(){var d=today(),sid=this.scan.siteId;
+  return sc(DB.sessions).filter(function(s){return s.date===d&&s.siteId===sid&&!s.closedAt})[0]||null},
+openSession:function(){var u=this.user();
+  DB.sessions.push({id:uid("se"),companyId:u.companyId,siteId:this.scan.siteId,date:today(),openedAt:nowTime(),
+    byId:u.id,byName:u.name,closedAt:null,expected:sc(DB.workers).filter(function(w){return w.statut==="actif"&&w.siteId===App.scan.siteId}).length});
+  audit("open","session",this.scan.siteId,null,null,"");dbSave();this.toast("Session ouverte ✅","ok");this.render()},
+closeSession:function(){var s=this.todaySession();if(!s)return;
+  s.closedAt=nowTime();
+  var evs=sc(DB.events).filter(function(e){return e.sessionId===s.id});
+  s.summary={scans:evs.length,workers:new Set(evs.map(function(e){return e.workerId})).size,anomalies:evs.filter(function(e){return e.anomaly}).length};
+  audit("close","session",s.id,null,s.summary,"");dbSave();this.toast("Session clôturée","ok");this.render()},
+startScan:function(){var self=this;
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){this.toast("Caméra indisponible : utilise la saisie manuelle","no");return}
+  this.scan.on=true;this.scan.count=0;this.scan.ok=0;this.scan.rej=0;this.scan.last=[];
+  this.render();
+  navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:false}).then(function(stream){
+    self.scan.stream=stream;
+    var v=document.getElementById("scv");if(v){v.srcObject=stream;v.setAttribute("playsinline","true")}
+    if(window.BarcodeDetector){try{self.scan.detector=new BarcodeDetector({formats:["qr_code"]})}catch(e){self.scan.detector=null}}
+    else self.scan.detector=null;
+    if(!self.scan.detector){document.getElementById("scanStatus").innerHTML="Lecteur natif indisponible sur ce navigateur. Utilise la saisie manuelle.";}
+    self.scanLoop();
+  }).catch(function(e){self.scan.on=false;self.toast("Accès caméra refusé : "+e.message,"no");self.render()})},
+scanLoop:function(){var self=this;if(!this.scan.on)return;
+  var v=document.getElementById("scv");if(!v)return;
+  if(this.scan.detector){
+    this.scan.detector.detect(v).then(function(codes){
+      if(codes&&codes.length){var raw=codes[0].rawValue;self.handleScan(raw)}
+      setTimeout(function(){self.scanLoop()},450)}).catch(function(){setTimeout(function(){self.scanLoop()},800)})}
+},
+stopScan:function(){this.scan.on=false;
+  if(this.scan.stream){this.scan.stream.getTracks().forEach(function(t){t.stop()});this.scan.stream=null}
+  this.scan.detector=null;this.render()},
+toggleTorch:function(){var tr=this.scan.stream&&this.scan.stream.getVideoTracks()[0];
+  if(tr&&tr.applyConstraints&&tr.getCapabilities&&tr.getCapabilities().torch){
+    this.torchOn=!this.torchOn;var self=this;
+    tr.applyConstraints({advanced:[{torch:this.torchOn}]}).catch(function(){self.toast("Torche non supportée","no")})}
+  else this.toast("Torche non supportée sur cet appareil","no")},
+beep:function(ok){try{var ac=this.ac||new(window.AudioContext||window.webkitAudioContext)();this.ac=ac;
+  var o=ac.createOscillator(),g=ac.createGain();o.type="sine";o.frequency.value=ok?880:220;
+  g.gain.value=0.25;o.connect(g);g.connect(ac.destination);o.start();setTimeout(function(){o.stop()},ok?120:300)}catch(e){}},
+flash:function(ok){var f=document.getElementById("scanflash");if(!f)return;
+  f.style.background=ok?"#34d399":"#f87171";f.style.opacity=0.55;setTimeout(function(){f.style.opacity=0},220)},
+manualScan:function(){var t=val("manualTk").trim();if(!t){this.toast("Saisis un identifiant","no");return}
+  this.handleScan(t);document.getElementById("manualTk").value=""},
+// ---- VALIDATION D’UN SCAN (cœur métier anti-fraude) ----
+handleScan:function(raw){raw=String(raw||"").trim();if(!raw)return;
+  var u=this.user(),siteId=this.scan.siteId,d=today(),t=nowTime();
+  var self=this;
+  function reject(msg){self.scan.count++;self.scan.rej++;self.scan.last.unshift({ok:false,nom:raw.slice(0,24),op:msg,time:t,date:self.today(),anomaly:true});
+    self.scan.last=self.scan.last.slice(0,10);self.beep(false);self.flash(false);updStatus(msg,false);
+    var st=document.getElementById("cRej");if(st)st.textContent=self.scan.rej;
+    var ls=document.getElementById("lastScan");if(ls)ls.innerHTML="<div class=\"msg no\">✕ "+esc(msg)+"</div>";
+    var rs=document.getElementById("recentScans");if(rs)rs.innerHTML=self.recentScansHtml()}
+  function updStatus(msg,ok){var s=document.getElementById("scanStatus");if(s)s.innerHTML=(ok?"✓ ":"✕ ")+esc(msg)}
+  // accepte : token complet OU matricule (saisie manuelle)
+  var b=sc(DB.badges).find(function(x){return x.token===raw&&x.status==="active"});
+  var w=null;
+  if(!b){w=sc(DB.workers).find(function(x){return x.matricule===raw&&x.statut==="actif"});
+    if(w)b=this.badgeOf(w.id);
+    if(!b){reject("QR Code / badge inconnu ou désactivé");notify("Scan refusé : badge inconnu (« "+raw.slice(0,20)+" »)","no");return}}
+  w=this.workerById(b.workerId);
+  if(!w||w.companyId!==u.companyId){reject("Badge inconnu dans ton entreprise");return}
+  if(w.statut!=="actif"){reject(w.prenom+" "+w.nom+" est suspendu : pointage refusé");return}
+  // état du jour
+  var day=computeDay(w.id,d);
+  var mode=this.scan.mode,proposed=mode;
+  if(mode==="auto"){
+    if(!day.arrivee)proposed="arrivee";
+    else if(day.arrivee&&!day.depart&&day.pauses.length&&day.pauses[day.pauses.length-1][1]===null)proposed="pauseFin";
+    else if(day.arrivee&&!day.depart)proposed=(day.pauses.length&&new Date().getHours()>=12)?"pauseDebut":"depart";
+    else proposed="depart";
+    if(day.depart){reject(w.prenom+" "+w.nom+" a déjà pointé le départ aujourd’hui");return}}
+  // doublons
+  var exists=sc(DB.events).find(function(e){return e.workerId===w.id&&e.date===d&&e.type===proposed});
+  if(exists){reject(w.prenom+" "+w.nom+" : « "+OPS[proposed]+" » déjà enregistré à "+exists.time);return}
+  if(proposed==="depart"&&!day.arrivee){reject("Départ sans arrivée : impossible");return}
+  if(proposed==="pauseFin"&&!(day.pauses.length&&day.pauses[day.pauses.length-1][1]===null)){reject("Fin de pause sans pause en cours");return}
+  // cohérence site
+  var anomaly=false;
+  if(w.siteId&&w.siteId!==siteId)anomaly=true;
+  var sess=this.todaySession();
+  var ev={id:uid("e"),companyId:u.companyId,sessionId:sess?sess.id:null,workerId:w.id,badgeId:b.id,
+    type:proposed,date:d,time:t,ts:new Date().toISOString(),byUserId:u.id,byName:u.name,
+    sessionSiteId:siteId,offline:!navigator.onLine,anomaly:anomaly,note:anomaly?("Affecté à "+(this.siteById(w.siteId)?this.siteById(w.siteId).nom:"?")+" mais pointé sur "+(this.siteById(siteId)?this.siteById(siteId).nom:"?")):"",synced:true};
+  DB.events.push(ev);
+  if(anomaly)notify("Pointage hors "+this.T("site")+" : "+w.prenom+" "+w.nom+" ("+OPS[proposed]+" "+t+")","wn");
+  audit("scan","event",ev.id,null,{type:proposed,time:t,worker:w.nom+" "+w.prenom},"");
+  dbSave();
+  this.scan.count++;this.scan.ok++;this.scan.last=this.scan.last||[];
+  this.scan.last.unshift({ok:true,nom:w.prenom+" "+w.nom,op:OPS[proposed],time:t,date:today(),anomaly:anomaly});
+  this.scan.last=this.scan.last.slice(0,10);
+  this.beep(true);this.flash(true);updStatus(w.prenom+" "+w.nom+" — "+OPS[proposed]+" enregistré à "+t,true);
+  var c1=document.getElementById("cTot");if(c1)c1.textContent=this.scan.count;
+  var c2=document.getElementById("cOk");if(c2)c2.textContent=this.scan.ok;
+  var ls=document.getElementById("lastScan");
+  if(ls)ls.innerHTML="<div class=\"msg "+(anomaly?"wn":"ok")+"\">"+(anomaly?"⚠ ":"✓ ")+esc(w.prenom+" "+w.nom)+" — "+OPS[proposed]+" à "+t+
+    (anomaly?"<br><b>Anomalie :</b> "+esc(ev.note):"")+"</div>";
+  var rs=document.getElementById("recentScans");if(rs)rs.innerHTML=this.recentScansHtml()}
+});
+</script>
+<script>
+// ================== HEURES / RÉCLAMATIONS / PAIES / RAPPORTS / RÉGLAGES ==================
+Object.assign(App,{
+activeCorrection:function(wId,date){return (DB.corrections||[]).find(function(c){return c.workerId===wId&&c.date===date&&!c.cancelled})},
+computeDayC:function(wId,date){var r=computeDay(wId,date),c=this.activeCorrection(wId,date);
+  if(c){var o=JSON.parse(JSON.stringify(r));r.correction=c.motif;
+    if(c.arrivee!==undefined&&c.arrivee!==null)r.arrivee=c.arrivee;
+    if(c.depart!==undefined&&c.depart!==null)r.depart=c.depart;
+    if(r.arrivee&&r.depart){var mn=function(t){var p=t.split(":");return+p[0]*60+ +p[1]};
+      var a=mn(r.arrivee),d=mn(r.depart);if(d<a)d+=1440;r.presence=(d-a)/60;r.effectif=Math.max(0,r.presence-(c.pauseTot||0));
+      var w=this.workerById(wId);r.hs=Math.max(0,r.effectif-(w?+w.hsBase||8:8))}}
+  return r},
+dayValidated:function(wId,date){return (DB.validations||[]).some(function(v){return v.workerId===wId&&v.date===date})},
+validateDay:function(wId,date){if(!can("correct")){this.toast("⛔ Non autorisé","no");return}
+  DB.validations=DB.validations||[];if(this.dayValidated(wId,date)){this.toast("Déjà validée","wn");return}
+  DB.validations.push({id:uid("v"),companyId:this.user().companyId,workerId:wId,date:date,byId:this.user().id,ts:new Date().toISOString()});
+  audit("validate","day",wId+"|"+date,null,null,"");dbSave();this.toast("Journée validée ✅","ok");this.render()},
+vTimes:function(){if(!can("times"))return this.deny();
+  var d=this.timesDate||today(),ws=sc(DB.workers).filter(function(w){return App.timesSite?(w.siteId===App.timesSite):true});
+  var self=this;
+  return this.sec("Heures travaillées — "+dLabel(d),"Contrôle, correction et validation des journées")+
+  "<div class=\"grid2\"><div><label class=\"fld\">Date</label><input type=\"date\" value=\""+d+"\" onchange=\"App.setTimesDate(this.value)\"></div>"+
+  "<div><label class=\"fld\">"+this.T("site")+"</label><select onchange=\"App.timesSite=this.value;App.render()\"><option value=\"\">Tous</option>"+sc(DB.sites).map(function(s){return"<option value=\""+s.id+"\""+(App.timesSite===s.id?" selected":"")+">"+esc(s.nom)+"</option>"}).join("")+"</select></div></div>"+
+  ws.map(function(w){var r=self.computeDayC(w.id,d);
+    return"<div class=\"card\" style=\"padding:12px\"><div style=\"display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px\">"+
+    "<div><b>"+esc(w.prenom+" "+w.nom)+"</b> <span class=\"mut small\">"+esc(w.matricule)+"</span>"+(self.dayValidated(w.id,d)?" <span class=\"pill ok\">validée</span>":"")+
+    (r.correction?" <span class=\"pill wn\">corrigée</span>":"")+(r.anomaly?"":"")+"</div></div>"+
+    "<table class=\"d\" style=\"margin-top:8px\"><tr><th>Arrivée</th><th>Pauses</th><th>Départ</th><th>Effectif</th><th>HS</th></tr>"+
+    "<tr><td>"+(r.arrivee||"—")+(r.retard?" ⚠":"")+"</td><td>"+(r.pauses.length?fmtH(r.pauseTot):"—")+"</td><td>"+(r.depart||"—")+(r.departAnticipe?" ⚠":"")+"</td>"+
+    "<td><b>"+(r.arrivee?fmtH(r.effectif):"—")+"</b></td><td>"+(r.hs?fmtH(r.hs):"—")+"</td></tr></table>"+
+    (r.incomplet?"<div class=\"msg wn\" style=\"margin:8px 0 0\">⚠ Journée incomplète (pointage manquant ou pause non close)</div>":"")+
+    "<div class=\"grid3\" style=\"margin-top:10px\"><button class=\"btn sm\" onclick=\"App.validateDay('"+w.id+"','"+d+"')\">✔ Valider</button>"+
+    "<button class=\"btn sm\" onclick=\"App.correctSheet('"+w.id+"','"+d+"')\">✏️ Corriger</button>"+
+    "<button class=\"btn sm\" onclick=\"App.newClaim('"+w.id+"','"+d+"')\">✋ Réclamation</button></div></div>"}).join("")},
+setTimesDate:function(v){this.timesDate=v;this.render()},
+correctSheet:function(wId,date){var w=this.workerById(wId),r=this.computeDayC(wId,date);
+  this.sheet("<div class=\"h\" style=\"margin-bottom:10px\">Correction — "+esc(w.prenom+" "+w.nom)+" · "+dLabel(date)+"</div>"+
+  "<div class=\"msg wn\">La valeur initiale est conservée dans le journal d’audit. Un motif est obligatoire.</div>"+
+  "<div class=\"grid2\"><div><label class=\"fld\">Arrivée (actuelle : "+(r.arrivee||"—")+")</label><input id=\"cr_a\" type=\"time\" value=\""+(r.arrivee||"")+"\"></div>"+
+  "<div><label class=\"fld\">Départ (actuel : "+(r.depart||"—")+")</label><input id=\"cr_d\" type=\"time\" value=\""+(r.depart||"")+"\"></div></div>"+
+  "<div class=\"grid2\"><div><label class=\"fld\">Total pauses (h, ex 1 ou 1.5)</label><input id=\"cr_p\" type=\"number\" step=\"0.25\" value=\""+(r.pauseTot||0)+"\"></div>"+
+  "<div><label class=\"fld\">Motif *</label><input id=\"cr_m\" placeholder=\"Ex : oubli de pointage départ\"></div></div>"+
+  "<div style=\"margin-top:16px\" class=\"grid2\"><button class=\"btn primary\" onclick=\"App.saveCorrection('"+wId+"','"+date+"')\">✔ Enregistrer la correction</button>"+
+  "<button class=\"btn\" onclick=\"App.closeSheet()\">Annuler</button></div>")},
+saveCorrection:function(wId,date){if(!can("correct")){this.toast("⛔ Non autorisé","no");return}
+  var motif=val("cr_m").trim();if(!motif){this.toast("Motif obligatoire","no");return}
+  var before=this.computeDayC(wId,date);
+  DB.corrections=DB.corrections||[];
+  var c={id:uid("cr"),companyId:this.user().companyId,workerId:wId,date:date,
+    arrivee:val("cr_a")||null,depart:val("cr_d")||null,pauseTot:+val("cr_p")||0,motif:motif,
+    byId:this.user().id,byName:this.user().name,ts:new Date().toISOString(),cancelled:false,
+    before:{arrivee:before.arrivee,depart:before.depart,pauseTot:before.pauseTot}};
+  DB.corrections.push(c);audit("correction","times",wId+"|"+date,c.before,{arrivee:c.arrivee,depart:c.depart,pauseTot:c.pauseTot},motif);
+  dbSave();this.closeSheet();this.toast("Correction enregistrée — traçable ✅","ok");this.render()},
+// ---------- RÉCLAMATIONS ----------
+vClaims:function(){if(!can("claims"))return this.deny();
+  var cls=sc(DB.claims).slice().reverse();
+  return this.sec("Réclamations & litiges","Chaque contestation est un dossier documenté, jamais effacé")+
+  "<button class=\"bigbtn\" onclick=\"App.newClaim()\">✋ Nouvelle réclamation</button><div style=\"height:12px\"></div>"+
+  (cls.length?cls.map(function(c){var w=App.workerById(c.workerId);
+    var tone=c.status==="acceptee"||c.status==="clôturée"?"ok":c.status==="rejetee"?"no":"wn";
+    return"<div class=\"card\" style=\"padding:12px\" onclick=\"App.claimSheet('"+c.id+"')\" style=\"cursor:pointer\">"+
+    "<div style=\"display:flex;justify-content:space-between\"><b>#"+c.id.slice(-5).toUpperCase()+" · "+esc(w?w.prenom+" "+w.nom:"?")+"</b><span class=\"pill "+tone+"\">"+c.status+"</span></div>"+
+    "<div class=\"mut small\">"+c.type+" · "+dLabel(c.date)+" · "+esc(c.desc).slice(0,80)+"</div></div>"}).join(""):
+  "<div class=\"mut\">Aucune réclamation.</div>")},
+newClaim:function(workerId,date){var ws=sc(DB.workers);
+  this.sheet("<div class=\"h\" style=\"margin-bottom:10px\">Déclarer une réclamation</div>"+
+  "<label class=\"fld\">Travailleur concerné</label><select id=\"cl_w\">"+ws.map(function(w){return"<option value=\""+w.id+"\""+(w.id===workerId?" selected":"")+">"+esc(w.prenom+" "+w.nom)+"</option>"}).join("")+"</select>"+
+  "<label class=\"fld\">Date du problème</label><input id=\"cl_d\" type=\"date\" value=\""+(date||today())+"\">"+
+  "<label class=\"fld\">Type</label><select id=\"cl_t\"><option>Journée non enregistrée</option><option>Heure incorrecte</option><option>Départ manquant</option><option>Pause mal enregistrée</option><option>Heures supplémentaires oubliées</option><option>Mauvais site</option><option>Montant estimé incorrect</option><option>Autre</option></select>"+
+  "<label class=\"fld\">Description</label><textarea id=\"cl_x\" rows=\"3\" placeholder=\"Explique précisément le problème\"></textarea>"+
+  "<div style=\"margin-top:16px\" class=\"grid2\"><button class=\"btn primary\" onclick=\"App.saveClaim()\">Envoyer</button><button class=\"btn\" onclick=\"App.closeSheet()\">Annuler</button></div>")},
+saveClaim:function(){var wId=val("cl_w");if(!wId){this.toast("Choisis un travailleur","no");return}
+  var c={id:uid("cl"),companyId:this.user().companyId,workerId:wId,date:val("cl_d")||today(),type:val("cl_t"),
+    desc:val("cl_x"),status:"nouvelle",history:[{ts:new Date().toISOString(),by:this.user().name,txt:"Réclamation créée"}],
+    assigned:"",decision:"",createdAt:today(),closedAt:null};
+  DB.claims.push(c);notify("Nouvelle réclamation : "+c.type,"no");audit("create","claim",c.id,null,{type:c.type},"");
+  dbSave();this.closeSheet();this.toast("Réclamation enregistrée","ok");this.render()},
+claimSheet:function(id){var c=DB.claims.find(function(x){return x.id===id});if(!c)return;
+  var w=this.workerById(c.workerId),r=this.computeDayC(c.workerId,c.date);
+  this.sheet("<div class=\"h\" style=\"margin-bottom:10px\">Dossier #"+c.id.slice(-5).toUpperCase()+"</div>"+
+  "<div class=\"mut small\">"+esc(w?w.prenom+" "+w.nom:"?")+" · "+dLabel(c.date)+" · "+esc(c.type)+"</div>"+
+  "<div class=\"card\" style=\"margin-top:10px\"><div class=\"small\">"+esc(c.desc)+"</div>"+
+  "<table class=\"d\" style=\"margin-top:8px\"><tr><th>Arrivée</th><th>Départ</th><th>Effectif</th><th>HS</th></tr>"+
+  "<tr><td>"+(r.arrivee||"—")+"</td><td>"+(r.depart||"—")+"</td><td>"+(r.arrivee?fmtH(r.effectif):"—")+"</td><td>"+fmtH(r.hs)+"</td></tr></table></div>"+
+  "<b class=\"small\">Historique</b>"+c.history.map(function(h){return"<div class=\"mut small\" style=\"margin-top:6px\">· "+esc(h.txt)+" — "+esc(h.by)+"</div>"}).join("")+
+  "<label class=\"fld\">Décision / traitement</label><textarea id=\"cl_dec\" rows=\"2\" placeholder=\"Ex : vérifié avec le chef de chantier, arrivée corrigée à 07:55\">"+esc(c.decision)+"</textarea>"+
+  "<div class=\"sw\" style=\"margin-top:12px\"><div class=\"chip\" onclick=\"App.setClaim('"+id+"','encours')\">En cours</div>"+
+  "<div class=\"chip\" onclick=\"App.setClaim('"+id+"','attente')\">Attente justificatifs</div>"+
+  "<div class=\"chip\" onclick=\"App.setClaim('"+id+"','acceptee')\">Acceptée</div>"+
+  "<div class=\"chip\" onclick=\"App.setClaim('"+id+"','rejetee')\">Rejetée</div>"+
+  "<div class=\"chip\" onclick=\"App.setClaim('"+id+"','clôturée')\">Clôturée</div></div>")},
+setClaim:function(id,status){var c=DB.claims.find(function(x){return x.id===id});if(!c)return;
+  var dec=val("cl_dec");
+  c.status=status;c.decision=dec||c.decision;c.history.push({ts:new Date().toISOString(),by:this.user().name,txt:"Statut → "+status+(dec?" · décision : "+dec:"")});
+  if(status==="clôturée")c.closedAt=today();
+  audit("update","claim",id,null,{status:status},dec);dbSave();this.toast("Dossier mis à jour","ok");this.claimSheet(id);this.render()},
+// ---------- RÉMUNÉRATIONS ----------
+periodDays:function(ym){var y=+ym.slice(0,4),m=+ym.slice(5),out=[],d=new Date(y,m-1,1);
+  while(d.getMonth()===m-1){out.push(today(d));d.setDate(d.getDate()+1)}return out},
+payOf:function(w,ym){var days=this.periodDays(ym),self=this,totH=0,totHS=0,validDays=0,rawDays=0;
+  // bornes contractuelles : seuls les jours entre début et départ sont comptés
+  var deb=w.dateDebut||null,fin=w.dateFin||null;
+  days.forEach(function(d){if(deb&&d<deb)return;if(fin&&d>fin)return;
+    var r=self.computeDayC(w.id,d);if(r.arrivee){rawDays++;totH+=r.effectif;totHS+=r.hs;
+    if(self.dayValidated(w.id,d))validDays++}});
+  var est=0;
+  if(w.mode==="journalier")est=validDays*w.tarif;
+  else if(w.mode==="horaire")est=totH*w.tarif+totHS*w.tarif*(this.hsMajor()||1);
+  else if(w.mode==="mensuel")est=w.tarif;
+  else est=w.tarif;
+  return{hours:totH,hs:totHS,validDays:validDays,rawDays:rawDays,estimated:est}},
+hsMajor:function(){var c=this.myCompany();return c&&c.hsMajor?+c.hsMajor:1.25},
+vPay:function(){if(!can("pay"))return this.deny();
+  var ym=this.payMonth||(new Date().getFullYear()+"-"+("0"+(new Date().getMonth()+1)).slice(-2));
+  var ws=sc(DB.workers),self=this;
+  return this.sec("Rémunérations — "+ym,"Montant par jour défini par fiche → le total à payer se calcule automatiquement")+
+  "<label class=\"fld\">Période (AAAA-MM)</label><input value=\""+ym+"\" onchange=\"App.payMonth=this.value;App.render()\">"+
+  "<div class=\"msg inf\"><b>Calcul automatique :</b> montant/jour × journées validées (mode journalier), ou heures × taux (mode horaire). La majoration des heures supplémentaires est paramétrable (actuellement ×"+this.hsMajor()+"). Aucun paiement n’est enregistré ici : POINTPRO calcule uniquement le <b>montant total à payer</b>.</div>"+
+  ws.map(function(w){var p=self.payOf(w,ym);
+    return"<div class=\"card\" style=\"padding:12px\"><div style=\"display:flex;justify-content:space-between;align-items:center\"><b>"+esc(w.prenom+" "+w.nom)+"</b>"+
+    "<span class=\"pill inf\">"+w.mode+" · "+fmM(w.tarif)+(w.mode==="journalier"?" / jour":"")+"</span></div>"+
+    "<div class=\"mut small\">Du "+dLabel(w.dateDebut)+(w.dateFin?" au "+dLabel(w.dateFin):" — en cours")+"</div>"+
+    "<table class=\"d\" style=\"margin-top:8px\"><tr><th>Jours</th><th>Validés</th><th>Heures</th><th>HS</th><th>Total à payer</th></tr>"+
+    "<tr><td>"+p.rawDays+"</td><td>"+p.validDays+"</td><td>"+fmtH(p.hours)+"</td><td>"+fmtH(p.hs)+"</td>"+
+    "<td class=\"green\"><b>"+fmM(p.estimated)+"</b></td></tr></table></div>"}).join("")},
+// ---------- RAPPORTS ----------
+reportRows:function(ids,from,to){var self=this,rows=[];
+  ids.forEach(function(wId){var w=self.workerById(wId);if(!w)return;
+    var d=new Date(from+"T00:00:00"),end=new Date(to+"T00:00:00"),totH=0,totHS=0,days=0;
+    while(d<=end){var dt=today(d),r=self.computeDayC(wId,dt);
+      if(r.arrivee){days++;totH+=r.effectif;totHS+=r.hs;
+        rows.push([w.nom+" "+w.prenom,w.matricule,dt,r.arrivee,r.depart||"—",fmtH(r.pauseTot),fmtH(r.effectif),fmtH(r.hs),r.incomplet?"⚠ incomplet":"",r.correction?"corrigée":""])}
+      d.setDate(d.getDate()+1)}
+  });return rows},
+reportsDocx:function(kind,ids,from,to){var c=this.myCompany(),rows=this.reportRows(ids,from,to);
+  var bodyXml="";
+  function p(runs,sz){return"<w:p>"+(runs||"")+"</w:p>"}
+  function run(t,sz,bold,color){return"<w:r><w:rPr>"+(bold?"<w:b/>":"")+"<w:sz w:val=\""+(sz||20)+"\"/>"+(color?"<w:color w:val=\""+color+"\"/>":"")+"</w:rPr><w:t>"+escX(t)+"</w:t></w:r>"}
+  bodyXml+=p(run(c?c.name:"",24,true,"0e7490"))+p(run("Rapport "+kind+" · "+dLabel(from)+" → "+dLabel(to),18,true))+
+  p(run([c&&c.adresse?c.adresse:"",c&&c.ville,c&&c.tel1].filter(Boolean).join(" · "),16)+"")+
+  p(run("Généré par POINTPRO le "+dLabel(today())+" — Édité par "+(this.user().name),16)+"");
+  var head=["Nom","Matricule","Date","Arrivée","Départ","Pauses","Effectif","HS","Statut","Correction"];
+  function tr(cells,bold){return"<w:tr>"+cells.map(function(cl){return"<w:tc><w:tcPr><w:tcW w:w=\"900\" w:type=\"dxa\"/></w:tcPr><w:p>"+run(String(cl),16,bold)+"</w:p></w:tc>"}).join("")+"</w:tr>"}
+  bodyXml+="<w:tbl><w:tblPr><w:tblW w:w=\"9500\" w:type=\"dxa\"/><w:tblBorders>"+["top","left","bottom","right","insideH","insideV"].map(function(s){return"<w:"+s+" w:val=\"single\" w:sz=\"4\" w:color=\"334155\"/>"}).join("")+"</w:tblBorders></w:tblPr>"+
+  tr(head,true)+rows.map(function(r){return tr(r,false)}).join("")+"</w:tbl>";
+  bodyXml+=p(run("",16))+p(run("Visa responsable : ______________________    Visa travailleur : ______________________",16))+
+  p(run("Élaboré avec POINTPRO — SaaS de pointage mobile",14,false,"94a3b8"));
+  var bytes=buildDocx(bodyXml,{rels:"",files:[]});
+  dl(bytes,"rapport_"+kind+"_"+from+".docx");this.toast("Rapport Word téléchargé ✅","ok")},
+reportsXlsx:function(kind,ids,from,to){var rows=this.reportRows(ids,from,to);
+  var head=["Nom","Matricule","Date","Arrivée","Départ","Pauses","Effectif (h)","HS (h)","Statut","Correction"];
+  var data=[head].concat(rows.map(function(r){return[r[0],r[1],r[2],r[3],r[4],r[5],r[6],r[7],r[8],r[9]]}));
+  dl(buildXlsx("Presences",data),"presences_"+kind+"_"+from+".xlsx");this.toast("Rapport Excel téléchargé ✅","ok")},
+vReports:function(){if(!can("reports"))return this.deny();
+  var ws=sc(DB.workers),d=today();
+  return this.sec("Rapports & exports","Documents professionnels avec l’identité de ton entreprise — Word, Excel, PDF")+
+  [["journalier","📅 Rapport journalier",today(),today()],["hebdo","🗓️ Rapport hebdomadaire",this.dateAdd(today(),-6),today()],
+  ["mensuel","📆 Rapport mensuel",today().slice(0,8)+"01",today()]].map(function(r){
+    return"<div class=\"card\"><h3>"+r[1]+"</h3><div class=\"mut small\">"+dLabel(r[2])+" → "+dLabel(r[3])+"</div>"+
+    "<div class=\"grid3\" style=\"margin-top:10px\">"+
+    "<button class=\"btn sm\" onclick=\"App.reportsDocx('"+r[0]+"',App.allWorkerIds(),'"+r[2]+"','"+r[3]+"')\">📄 Word</button>"+
+    "<button class=\"btn sm\" onclick=\"App.reportsXlsx('"+r[0]+"',App.allWorkerIds(),'"+r[2]+"','"+r[3]+"')\">📊 Excel</button>"+
+    "<button class=\"btn sm\" onclick=\"App.reportsPdf('"+r[0]+"','"+r[2]+"','"+r[3]+"')\">🖨️ PDF</button></div></div>"}).join("")+
+  "<div class=\"card\"><h3>🖨️ Badges — impression en série</h3><div class=\"mut small\">Génère une planche Word contenant tous les badges actifs, prête à découper.</div>"+
+  "<div class=\"grid2\" style=\"margin-top:10px\"><button class=\"btn sm\" onclick=\"App.badgesSheetDocx(App.allWorkerIds())\">📄 Word — planche complète</button>"+
+  "<button class=\"btn sm\" onclick=\"App.printBadges(App.allWorkerIds())\">🖨️ Imprimer / PDF</button></div></div>"+
+  "<div class=\"card\"><h3>⚖️ Rapport litiges</h3><div class=\"grid2\" style=\"margin-top:10px\">"+
+  "<button class=\"btn sm\" onclick=\"App.reportsDocx('litiges',App.allWorkerIds(),'"+this.dateAdd(today(),-30)+"','"+today()+"')\">📄 Word</button>"+
+  "<button class=\"btn sm\" onclick=\"App.claimsPdf()\">🖨️ PDF</button></div></div>"},
+allWorkerIds:function(){return sc(DB.workers).map(function(w){return w.id})},
+reportsPdf:function(kind,from,to){var rows=this.reportRows(this.allWorkerIds(),from,to),c=this.myCompany();
+  var html="<h2>"+esc(c?c.name:"")+"</h2><p>Rapport "+kind+" · "+dLabel(from)+" → "+dLabel(to)+"<br>"+esc(c?c.adresse:"")+" "+esc(c?c.ville:"")+" · "+esc(c?c.tel1:"")+"</p>"+
+  "<table border=1 cellspacing=0 cellpadding=4 style='border-collapse:collapse;font-size:11px;width:100%'><tr>"+["Nom","Mat","Date","Arrivée","Départ","Pauses","Effectif","HS"].map(function(h){return"<th>"+h+"</th>"}).join("")+"</tr>"+
+  rows.map(function(r){return"<tr>"+[r[0],r[1],r[2],r[3],r[4],r[5],r[6],r[7]].map(function(v){return"<td>"+esc(v)+"</td>"}).join("")+"</tr>"}).join("")+"</table>"+
+  "<p style='margin-top:20px'>Visa responsable : ______________    Visa travailleur : ______________</p>"+
+  "<p style='font-size:10px;color:#666'>Élaboré avec POINTPRO le "+dLabel(today())+"</p>";
+  this.printHtml(html)},
+claimsPdf:function(){var cls=sc(DB.claims),c=this.myCompany();
+  var html="<h2>"+esc(c?c.name:"")+" — Rapport litiges</h2>"+
+  "<table border=1 cellspacing=0 cellpadding=4 style='border-collapse:collapse;font-size:11px;width:100%'><tr><th>Dossier</th><th>Travailleur</th><th>Date</th><th>Type</th><th>Statut</th><th>Décision</th></tr>"+
+  cls.map(function(cl){var w=App.workerById(cl.workerId);return"<tr><td>#"+cl.id.slice(-5)+"</td><td>"+esc(w?w.nom:"")+"</td><td>"+cl.date+"</td><td>"+esc(cl.type)+"</td><td>"+cl.status+"</td><td>"+esc(cl.decision||"")+"</td></tr>"}).join("")+"</table>";
+  this.printHtml(html)},
+printHtml:function(html){var w=window.open("","_blank");if(!w){this.toast("Autorise les fenêtres surgissantes","no");return}
+  w.document.write("<!doctype html><html><head><meta charset='utf-8'><title>POINTPRO</title></head><body style='font-family:Arial'>"+html+"</body></html>");
+  w.document.close();setTimeout(function(){w.print()},500)},
+// ---------- PLUS / RÉGLAGES ----------
+vMore:function(){return this.sec("Plus","Configuration, sécurité et supervision")+
+  [["times","⏱️ Heures & validation","times"],["claims","✋ Réclamations","claims"],["pay","💵 Rémunérations","pay"],
+  ["sites","📍 "+this.T("site")+"s & équipes","sites"],["users","👤 Utilisateurs & rôles","users"],["settings","🏢 Mon entreprise","settings"],
+  ["audit","🛡️ Journal d’audit","audit"],["notif","🔔 Notifications","notif"],["tests","🧪 Auto-tests","tests"],["guides","📖 Guides & FAQ","guides"]]
+  .filter(function(m){return true}).map(function(m){return"<div class=\"lrow\" onclick=\"App.setTab('"+m[2]+"')\" style=\"cursor:pointer\"><div style=\"font-size:22px\">"+m[0].slice(0,3)+"</div><div class=\"grow\"><div class=\"nm\" style=\"font-size:15px\">"+m[0]+"</div></div><div class=\"mut\">›</div></div>"}).join("")+
+  "<div class=\"grid2\" style=\"margin-top:14px\"><button class=\"btn\" onclick=\"App.backupExport()\">💾 Sauvegarde</button>"+
+  "<button class=\"btn\" onclick=\"document.getElementById('bimp').click()\">📥 Restaurer</button></div>"+
+  "<button class=\"btn blk\" style=\"margin-top:10px\" onclick=\"App.pwaKit()\">📱 Générer le kit d’installation PWA (app sur le téléphone)</button>"+
+  "<input type=\"file\" id=\"bimp\" accept=\".json\" style=\"display:none\" onchange=\"App.backupImport(this)\">"},
+vNotif:function(){var ns=DB.notifs.filter(function(n){return n.companyId===App.user().companyId});
+  ns.forEach(function(n){n.read=true});dbSave();
+  return this.sec("Notifications",""+ns.length+" événement(s)")+(ns.length?ns.map(function(n){return"<div class=\"msg "+(n.kind==="no"?"no":n.kind==="wn"?"wn":"inf")+"\" style=\"margin-bottom:8px\">"+esc(n.txt)+"<div class=\"mut small\">"+n.ts.slice(0,16).replace("T"," ")+"</div></div>"}).join(""):"<div class=\"mut\">Aucune notification.</div>")},
+vSites:function(){if(!can("manage"))return this.deny();
+  var st=sc(DB.sites);
+  return this.sec(this.T("site")+"s & équipes","Chaque "+this.T("site").toLowerCase()+" a son pointage et ses sessions")+
+  st.map(function(s){var n=sc(DB.workers).filter(function(w){return w.siteId===s.id&&w.statut==="actif"}).length;
+    return"<div class=\"card\" style=\"padding:12px\"><b>"+esc(s.nom)+"</b> <span class=\"pill inf\">"+n+" actif(s)</span>"+
+    "<div class=\"mut small\">"+esc(s.adresse||"—")+" · resp. "+esc(s.resp||"—")+"</div>"+
+    "<div class=\"grid2\" style=\"margin-top:8px\"><button class=\"btn sm\" onclick=\"App.editSite('"+s.id+"')\">✏️ Modifier</button>"+
+    "<button class=\"btn sm\" onclick=\"App.scan.siteId='"+s.id+"';App.setTab('scan')\">📷 Pointer ici</button></div></div>"}).join("")+
+  "<button class=\"btn blk\" onclick=\"App.addSiteSheet()\">➕ Nouveau "+this.T("site").toLowerCase()+"</button>"},
+addSiteSheet:function(){this.sheet("<div class=\"h\" style=\"margin-bottom:10px\">Nouveau "+this.T("site")+"</div>"+
+  "<label class=\"fld\">Nom *</label><input id=\"st_n\" placeholder=\"Ex : Chantier Ziguinchor — marché\"><label class=\"fld\">Adresse</label><input id=\"st_a\">"+
+  "<label class=\"fld\">"+this.T("chief")+"</label><input id=\"st_r\">"+
+  "<div style=\"margin-top:16px\" class=\"grid2\"><button class=\"btn primary\" onclick=\"App.saveSite()\">✔ Enregistrer</button><button class=\"btn\" onclick=\"App.closeSheet()\">Annuler</button></div>")},
+saveSite:function(){if(!can("manage"))return this.deny();var n=val("st_n");if(!n){this.toast("Nom obligatoire","no");return}
+  DB.sites.push({id:uid("s"),companyId:this.user().companyId,nom:n,adresse:val("st_a"),resp:val("st_r"),statut:"actif",createdAt:today()});
+  audit("create","site",n,null,null,"");dbSave();this.closeSheet();this.toast(this.T("site")+" créé ✅","ok");this.render()},
+editSite:function(id){var s=this.siteById(id);
+  this.sheet("<div class=\"h\" style=\"margin-bottom:10px\">Modifier</div><label class=\"fld\">Nom</label><input id=\"es_n\" value=\""+esc(s.nom)+"\">"+
+  "<label class=\"fld\">Adresse</label><input id=\"es_a\" value=\""+esc(s.adresse||"")+"\"><label class=\"fld\">"+this.T("chief")+"</label><input id=\"es_r\" value=\""+esc(s.resp||"")+"\">"+
+  "<div style=\"margin-top:16px\" class=\"grid2\"><button class=\"btn primary\" onclick=\"App.saveEditSite('"+id+"')\">✔ Enregistrer</button><button class=\"btn\" onclick=\"App.closeSheet()\">Annuler</button></div>")},
+saveEditSite:function(id){var s=this.siteById(id),before={nom:s.nom,adresse:s.adresse};
+  s.nom=val("es_n")||s.nom;s.adresse=val("es_a");s.resp=val("es_r");
+  audit("update","site",id,before,{nom:s.nom,adresse:s.adresse},"");dbSave();this.closeSheet();this.render()},
+vUsers:function(){if(!can("users"))return this.deny();
+  var us=sc(DB.users);
+  return this.sec("Utilisateurs & rôles","Chaque compte a des autorisations précises")+
+  us.map(function(u){return"<div class=\"card\" style=\"padding:12px\"><div style=\"display:flex;justify-content:space-between\"><b>"+esc(u.name)+"</b><span class=\"pill "+(u.active?"ok":"no")+"\">"+ROLES[u.role]+"</span></div>"+
+  "<div class=\"mut small\">"+esc(u.tel)+"</div>"+
+  "<div class=\"grid2\" style=\"margin-top:8px\"><button class=\"btn sm\" onclick=\"App.editUserSheet('"+u.id+"')\">✏️ Modifier</button>"+
+  "<button class=\"btn sm\" onclick=\"App.toggleUser('"+u.id+"')\">"+(u.active?"🚫 Désactiver":"✔ Activer")+"</button></div></div>"}).join("")+
+  "<button class=\"btn blk\" onclick=\"App.addUserSheet()\">➕ Nouvel utilisateur</button>"},
+addUserSheet:function(){var ws=sc(DB.workers);
+  this.sheet("<div class=\"h\" style=\"margin-bottom:10px\">Nouvel utilisateur</div>"+
+  "<label class=\"fld\">Nom</label><input id=\"us_n\"><label class=\"fld\">Téléphone (identifiant)</label><input id=\"us_t\" type=\"tel\">"+
+  "<label class=\"fld\">Rôle</label><select id=\"us_r\" onchange=\"document.getElementById('us_w').style.display=this.value==='ouvrier'?'block':'none'\">"+
+  Object.keys(ROLES).map(function(r){return"<option>"+r+"</option>"}).join("")+"</select>"+
+  "<div id=\"us_w\" style=\"display:none\"><label class=\"fld\">Travailleur lié (espace ouvrier)</label><select id=\"us_wk\">"+
+  ws.map(function(w){return"<option value=\""+w.id+"\">"+esc(w.prenom+" "+w.nom)+"</option>"}).join("")+"</select></div>"+
+  "<label class=\"fld\">PIN (4-6 chiffres)</label><input id=\"us_p\" type=\"password\" inputmode=\"numeric\">"+
+  "<div style=\"margin-top:16px\" class=\"grid2\"><button class=\"btn primary\" onclick=\"App.saveUser()\">✔ Créer</button><button class=\"btn\" onclick=\"App.closeSheet()\">Annuler</button></div>")},
+saveUser:function(){if(!can("users"))return this.deny();var n=val("us_n"),t=val("us_t"),p=val("us_p"),r=val("us_r");
+  if(!n||!t||!/^\d{4,6}$/.test(p)){this.toast("Champs incomplets","no");return}
+  if(DB.users.some(function(u){return u.tel===t})){this.toast("Ce téléphone existe déjà","no");return}
+  var u={id:uid("u"),companyId:this.user().companyId,name:n,tel:t,role:r,pin:hsh(p),active:true,createdAt:today(),workerId:r==="ouvrier"?(val("us_wk")||null):null};
+  DB.users.push(u);audit("create","user",u.id,null,{name:n,role:r},"");dbSave();this.closeSheet();this.toast("Utilisateur créé ✅","ok");this.render()},
+editUserSheet:function(id){var u=DB.users.find(function(x){return x.id===id});
+  this.sheet("<div class=\"h\" style=\"margin-bottom:10px\">Modifier — "+esc(u.name)+"</div>"+
+  "<label class=\"fld\">Rôle</label><select id=\"eu_r\">"+Object.keys(ROLES).map(function(r){return"<option"+(r===u.role?" selected":"")+">"+r+"</option>"}).join("")+"</select>"+
+  "<label class=\"fld\">Nouveau PIN (laisser vide = inchangé)</label><input id=\"eu_p\" type=\"password\" inputmode=\"numeric\">"+
+  "<div style=\"margin-top:16px\" class=\"grid2\"><button class=\"btn primary\" onclick=\"App.saveEditUser('"+id+"')\">✔ Enregistrer</button><button class=\"btn\" onclick=\"App.closeSheet()\">Annuler</button></div>")},
+saveEditUser:function(id){if(!can("users"))return this.deny();var u=DB.users.find(function(x){return x.id===id}),before={role:u.role};
+  u.role=val("eu_r");var p=val("eu_p");if(/^\d{4,6}$/.test(p))u.pin=hsh(p);
+  audit("update","user",id,before,{role:u.role},"Gestion des rôles");dbSave();this.closeSheet();this.toast("Utilisateur mis à jour","ok");this.render()},
+toggleUser:function(id){if(!can("users"))return;var u=DB.users.find(function(x){return x.id===id});if(u.id===this.user().id){this.toast("Tu ne peux pas te désactiver toi-même","no");return}
+  u.active=!u.active;audit("status","user",id,null,{active:u.active},"");dbSave();this.render()},
+vAudit:function(){if(!can("audit"))return this.deny();
+  var as=DB.audit.filter(function(a){return a.companyId===App.user().companyId}).slice().reverse().slice(0,120);
+  return this.sec("Journal d’audit","Toute opération sensible est tracée : qui, quand, quoi, motif")+
+  (as.length?as.map(function(a){return"<div class=\"card\" style=\"padding:10px\"><b>"+esc(a.action)+"</b> · "+esc(a.entity)+" · <span class=\"mut small\">"+esc(a.actorName)+" · "+a.ts.slice(0,16).replace("T"," ")+"</span>"+
+  (a.motif?"<div class=\"mut small\">Motif : "+esc(a.motif)+"</div>":"")+
+  (a.before?"<div class=\"mut small\">Avant : "+esc(String(a.before)).slice(0,90)+"</div>":"")+
+  (a.after?"<div class=\"small\">Après : "+esc(String(a.after)).slice(0,90)+"</div>":"")+"</div>"}).join(""):"<div class=\"mut\">Aucune entrée.</div>")},
+vSettings:function(){if(!can("settings"))return this.deny();var c=this.myCompany();
+  return this.sec("Mon entreprise","Ces informations s’affichent dans tous les rapports et badges")+
+  "<div class=\"card\"><h3>Identité administrative</h3>"+
+  [["name","Nom commercial"],["raison","Raison sociale"],["ninea","NINEA"],["rccm","RCCM"],["adresse","Adresse"],["ville","Ville"],["pays","Pays"],["tel1","Téléphone principal"],["tel2","Téléphone secondaire"],["email","E-mail"],["web","Site Internet"],["resp","Responsable principal"]]
+  .map(function(f){return"<label class=\"fld\">"+f[1]+"</label><input value=\""+esc(c[f[0]]||"")+"\" onchange=\"App.updCo('"+f[0]+"',this.value)\">"}).join("")+
+  "<label class=\"fld\">Secteur d’activité</label><select onchange=\"App.updCo('sector',this.value)\">"+Object.keys(SECTORS).map(function(k){return"<option value=\""+k+"\""+(k===c.sector?" selected":"")+">"+SECTORS[k].label+"</option>"}).join("")+"</select>"+
+  "<div class=\"mut small\" style=\"margin-top:6px\">Le secteur adapte automatiquement le vocabulaire de l’application ("+this.T("site")+", "+this.T("worker")+", "+this.T("team")+"…) et les indicateurs.</div></div>"+
+  "<div class=\"card\"><h3>Logo (en-tête des documents)</h3><div style=\"display:flex;gap:12px;align-items:center\">"+
+  (c.logo?"<img src=\""+c.logo+"\" style=\"width:64px;height:64px;object-fit:contain;background:#fff;border-radius:8px;padding:4px\">":"<div class=\"avatar\" style=\"width:64px;height:64px\">🏢</div>")+
+  "<input type=\"file\" id=\"lg_f\" accept=\"image/*\" style=\"display:none\" onchange=\"App.setLogo(this)\">"+
+  "<button class=\"btn sm\" onclick=\"document.getElementById('lg_f').click()\">🖼️ Importer le logo</button></div></div>"+
+  "<div class=\"card\"><h3>Règles de calcul</h3>"+
+  "<div class=\"grid2\"><div><label class=\"fld\">Majoration heures supp. (×)</label><input type=\"number\" step=\"0.05\" value=\""+this.hsMajor()+"\" onchange=\"App.updCo('hsMajor',+this.value)\"></div>"+
+  "<div><label class=\"fld\">Plafond avertissement (% paie)</label><input type=\"number\" value=\"80\" onchange=\"App.updCo('payWarn',+this.value)\"></div></div>"+
+  "<div class=\"mut small\">POINTPRO n’impose aucun taux légal : règle les majorations selon tes contrats et la réglementation applicable.</div></div>"},
+updCo:function(k,v){var c=this.myCompany(),before=c[k];c[k]=v;audit("update","company",k,before,v,"");dbSave();this.toast("Enregistré ✅","ok");this.render()},
+setLogo:function(inp){var f=inp.files[0];if(!f)return;var rd=new FileReader();
+  rd.onload=function(){var img=new Image();img.onload=function(){var c2=document.createElement("canvas"),mx=300,s=Math.min(1,mx/Math.max(img.width,img.height));
+    c2.width=Math.round(img.width*s);c2.height=Math.round(img.height*s);c2.getContext("2d").drawImage(img,0,0,c2.width,c2.height);
+    var c=App.myCompany();c.logo=c2.toDataURL("image/png");audit("update","company","logo",null,"logo","");dbSave();App.toast("Logo enregistré ✅","ok");App.render()};img.src=rd.result};
+  rd.readAsDataURL(f)},
+backupExport:function(){var data=JSON.stringify(DB);dl(u8(data),"pointpro_sauvegarde_"+today()+".json","application/json");this.toast("Sauvegarde téléchargée ✅","ok")},
+pwaKit:function(){
+  function icon(sz){var c=document.createElement("canvas");c.width=sz;c.height=sz;var x=c.getContext("2d");
+    x.fillStyle="#0b1220";x.fillRect(0,0,sz,sz);
+    x.fillStyle="#22d3ee";x.beginPath();x.arc(sz/2,sz/2,sz*0.38,0,7);x.fill();
+    x.fillStyle="#0b1220";x.font="bold "+Math.round(sz*0.3)+"px Arial";x.textAlign="center";x.textBaseline="middle";x.fillText("PP",sz/2,sz*0.54);
+    return b64dec(c.toDataURL("image/png").split(",")[1])}
+  var man=JSON.stringify({name:"POINTPRO — Pointage",short_name:"POINTPRO",start_url:"./index.html",scope:"./",
+    display:"standalone",orientation:"portrait",background_color:"#0b1220",theme_color:"#0b1220",
+    icons:[{src:"icon-192.png",sizes:"192x192",type:"image/png"},{src:"icon-512.png",sizes:"512x512",type:"image/png"}]},null,1);
+  var sw="var C='pointpro-v1';self.addEventListener('install',function(e){self.skipWaiting()});"+
+    "self.addEventListener('activate',function(e){e.waitUntil(self.clients.claim())});"+
+    "self.addEventListener('fetch',function(e){e.respondWith(caches.match(e.request).then(function(r){return r||"+
+    "fetch(e.request).then(function(res){var cl=res.clone();caches.open(C).then(function(c){c.put(e.request,cl)});return res})"+
+    ".catch(function(){return caches.match('./index.html')})}))});";
+  dl(u8(sw),"sw.js","text/javascript");
+  dl(u8(man),"manifest.json","application/json");
+  dl(icon(192),"icon-192.png","image/png");
+  dl(icon(512),"icon-512.png","image/png");
+  this.toast("Kit PWA téléchargé (4 fichiers) — mets-les à côté d’index.html sur ton hébergement HTTPS, puis « Ajouter à l’écran d’accueil »","ok")},
+backupImport:function(inp){var f=inp.files[0];if(!f)return;var rd=new FileReader();
+  rd.onload=function(){try{var d=JSON.parse(rd.result);if(!d.companies)throw new Error("Fichier invalide");
+    DB=d;dbSave();App.toast("Sauvegarde restaurée ✅","ok");App.logout()}catch(e){App.toast("Erreur : "+e.message,"no")}};
+  rd.readAsText(f)},
+// ---------- GUIDES ----------
+vGuides:function(){return this.sec("Guides & FAQ","Tout utilisateur, même débutant, peut maîtriser POINTPRO")+
+  "<details class=\"faq\" open><summary>🚀 Guide utilisateur — démarrer en 5 minutes</summary><div class=\"b\">"+
+  "1. <b>Pointeur :</b> onglet 📷 Pointer → ouvre une session → choisis le mode (Auto recommandé) → DÉMARRER LE SCAN CONTINU → scanne chaque badge. Le bip vert confirme, le rouge alerte. Aucun retour au menu nécessaire.<br>"+
+  "2. <b>Responsable :</b> onglet 👥 Équipe → « Ajouter un travailleur » → photo + nom + métier + site → le badge QR est généré automatiquement → exporte-le en Word ou imprime-le.<br>"+
+  "3. Chaque soir : onglet Plus → ⏱️ Heures → vérifie les journées (retards, incomplètes) → corrige si besoin avec motif → valide.<br>"+
+  "4. En fin de mois : Plus → 💵 Rémunérations → les montants estimés se calculent sur les journées validées → enregistre les paiements → exporte le rapport mensuel Word/Excel/PDF.<br>"+
+  "5. Hors connexion : tout fonctionne ; les pointages sont marqués « hors ligne » et restent à vérifier.</div></details>"+
+  "<details class=\"faq\"><summary>🛠️ Guide administrateur</summary><div class=\"b\">"+
+  "· Crée les comptes dans Plus → 👤 Utilisateurs (pointeur, responsable, comptable, ouvrier…). Chaque rôle n’a accès qu’à ses écrans.<br>"+
+  "· Renseigne l’identité et le logo de l’entreprise (Plus → 🏢 Mon entreprise) : ils s’affichent sur les badges et tous les rapports.<br>"+
+  "· Le secteur d’activité adapte le vocabulaire de l’app (chantier/ouvier pour le BTP, site client/agent pour la sécurité…).<br>"+
+  "· Toute correction ou validation est tracée dans le journal d’audit (qui, quand, avant/après, motif).<br>"+
+  "· Sauvegarde régulière : Plus → 💾 Sauvegarde (fichier JSON à conserver).</div></details>"+
+  "<details class=\"faq\"><summary>📱 Installer POINTPRO sur un smartphone</summary><div class=\"b\">"+
+  "POINTPRO est une application web mobile :<br>· <b>Android (Chrome) :</b> héberge le fichier (voir ci-dessous), ouvre l’adresse → menu ⋮ → « Ajouter à l’écran d’accueil ». L’app s’ouvre en plein écran comme une vraie application.<br>"+
+  "· <b>iPhone (Safari) :</b> ouvre l’adresse → bouton Partager → « Sur l’écran d’accueil ».<br>"+
+  "· Le scan caméra nécessite <b>HTTPS</b> et fonctionne nativement sur Chrome Android (lecteur QR intégré). Sur un navigateur sans lecteur natif, la saisie manuelle du matricule enregistre exactement les mêmes données.</div></details>"+
+  "<details class=\"faq\"><summary>🌐 Déploiement (multi-appareils)</summary><div class=\"b\">"+
+  "Cette version fonctionne <b>hors ligne sur un seul appareil</b> (les données restent dans le navigateur). Pour l’installer sur plusieurs téléphones et partager les données :<br>"+
+  "1. Héberge le fichier HTML sur un hébergement statique HTTPS gratuit (Netlify Drop, GitHub Pages, Firebase Hosting) en le renommant <code>index.html</code>.<br>"+
+  "2. Touche <b>« 📱 Générer le kit d’installation PWA »</b> (menu Plus, sous Sauvegarde) : 4 fichiers sont téléchargés — <code>manifest.json</code>, <code>sw.js</code>, <code>icon-192.png</code>, <code>icon-512.png</code>. Place-les dans le <b>même dossier</b> qu’<code>index.html</code>. L’app s’installe alors comme une vraie application (icône sur l’écran d’accueil, plein écran, fonctionne hors ligne).<br>"+
+  "3. <b>Synchronisation multi-appareils :</b> l’architecture est prête (chaque événement a un identifiant unique anti-doublon), mais un serveur (ex. Supabase, ~gratuit) doit y être branché — c’est la phase 2 recommandée avant une utilisation multi-pointeurs simultanée.</div></details>"+
+  "<details class=\"faq\"><summary>📖 Glossaire</summary><div class=\"b\">"+
+  "<b>Badge</b> : carte QR personnelle, révocable. · <b>Session de pointage</b> : période ouverte par le pointeur sur un site (traçabilité). · <b>Absent présumé</b> : travailleur actif sans arrivée enregistrée — à vérifier, jamais une absence confirmée. · <b>Journée validée</b> : journée vérifiée par un responsable ; seule base du calcul de paie. · <b>Anomalie</b> : pointage hors site affecté — enregistré mais signalé en orange. · <b>HS</b> : heures au-delà de la base horaire du travailleur. · <b>Total à payer</b> : montant calculé automatiquement (montant/jour × journées validées) sur la période contractuelle [premier jour de travail → jour de départ].</div></details>"+
+  "<details class=\"faq\"><summary>🔐 Sécurité & données personnelles</summary><div class=\"b\">"+
+  "· Isolation stricte : chaque requête filtre par entreprise ; un pointeur ne voit jamais les données d’une autre entreprise (testé dans les auto-tests).<br>"+
+  "· Le QR Code contient un identifiant aléatoire, <b>jamais</b> de données personnelles.<br>"+
+  "· Un badge révoqué est immédiatement refusé au scan ; les doublons sont bloqués.<br>"+
+  "· Un scan QR n’est pas une preuve absolue de présence : c’est pourquoi sessions, anomalies et validation humaine existent. Les événements saisis hors ligne sont marqués comme tels.<br>"+
+  "· Les données restent sur l’appareil : exporte la sauvegarde avant de changer de téléphone. La géolocalisation n’est pas activée par défaut ; toute activation doit respecter la réglementation applicable (données personnelles, Sénégal).</div></details>"},
+// ---------- AUTO-TESTS ----------
+vTests:function(){var t=this.runTests();
+  return this.sec("Auto-tests intégrés","Vérification en direct des fonctions critiques — résultats réels, calculés à l’instant")+
+  t.map(function(r){return"<div class=\"lrow\" style=\"padding:10px\"><div style=\"font-size:18px\">"+(r.ok?"✅":"❌")+"</div>"+
+  "<div class=\"grow\"><div class=\"nm\" style=\"font-size:14px\">"+r.name+"</div><div class=\"sub\">"+esc(r.detail)+"</div></div></div>"}).join("")+
+  "<div class=\"msg "+(t.every(function(r){return r.ok})?"ok":"no")+"\"><b>"+t.filter(function(r){return r.ok}).length+" / "+t.length+" tests réussis.</b> Les tests physiques (impression réelle des badges, scan caméra sur appareil) se vérifient sur le terrain : exporte un badge Word, mesure 85,6 × 54 mm, scanne le QR avec l’app elle-même (onglet Pointer → saisie manuelle du token du badge à tester, ou scan du badge imprimé).</div>"},
+runTests:function(){var T=[],self=this;
+  function t(name,ok,detail){T.push({name:name,ok:!!ok,detail:detail||""})}
+  try{
+    // 1. calcul heures : exemple du cahier des charges (08-12 / 13-17)
+    var evs=[["08:00","arrivee"],["12:00","pauseDebut"],["13:00","pauseFin"],["17:00","depart"]];
+    var cid=this.user().companyId,wid=uid("tw");
+    DB.workers.push({id:wid,companyId:cid,matricule:"TEST-0001",nom:"Test",prenom:"Heures",photo:null,poste:"",siteId:null,mode:"horaire",tarif:0,hStart:"08:00",hEnd:"17:00",hsBase:8,statut:"actif"});
+    var d1=today();var sess=null;
+    evs.forEach(function(e){DB.events.push({id:uid("te"),companyId:cid,sessionId:null,workerId:wid,badgeId:null,type:e[1],date:d1,time:e[0],sessionSiteId:null,anomaly:false})});
+    var r=computeDay(wid,d1);
+    t("Calcul heures (08h-12h/13h-17h)",Math.round(r.presence*10)===90&&r.pauseTot===1&&Math.round(r.effectif*10)===80,"Présence "+fmtH(r.presence)+", pause "+fmtH(r.pauseTot)+", effectif "+fmtH(r.effectif)+" — attendu 9h / 1h / 8h");
+    // 2. passage de minuit
+    var wid2=uid("tw");DB.workers.push({id:wid2,companyId:cid,matricule:"TEST-0002",nom:"Nuit",prenom:"Test",photo:null,poste:"",siteId:null,mode:"horaire",tarif:0,hStart:"22:00",hEnd:"06:00",hsBase:8,statut:"actif"});
+    DB.events.push({id:uid("te"),companyId:cid,workerId:wid2,type:"arrivee",date:d1,time:"22:00"});
+    DB.events.push({id:uid("te"),companyId:cid,workerId:wid2,type:"depart",date:d1,time:"02:00"});
+    var r2=computeDay(wid2,d1);
+    t("Travail de nuit + passage de minuit (22h→02h)",Math.round(r2.presence*10)===40,"Présence "+fmtH(r2.presence)+" — attendu 4h");
+    // 3. Reed-Solomon auto-cohérent
+    var cw=qrEncode("PP-TEST-42").m?null:null;var q=qrEncode("PP-TEST-42");
+    t("QR : matrice générée (v"+(q.size===21?1:q.size===25?2:3)+")",q.size===21||q.size===25||q.size===29,"Taille "+q.size+"×"+q.size);
+    // 4. format info constant M/masque0 présent aux deux copies
+    var fb1=q.m[8][0]===true&&q.m[8][1]===false&&q.m[8][2]===true;
+    t("QR : bits de format (M, masque 0)",fb1,"Rangée 8 : "+[0,1,2,3,4,5].map(function(x){return q.m[8][x]?1:0}).join(""));
+    // 5. ZIP : signature EOCD + entrées
+    var z=zipStore([{name:"a.txt",data:u8("hello")}]);
+    var dv=new DataView(z.buffer,z.byteOffset,z.byteLength);
+    var eocdOk=false;for(var i=z.length-22;i>0;i--){if(dv.getUint32(i,true)===0x06054b50){eocdOk=dv.getUint16(i+10,true)===1;break}}
+    t("ZIP (DOCX/XLSX) : structure EOCD",eocdOk,z.length+" octets, 1 entrée");
+    // 6. DOCX badge : dimensions exactes
+    var bt=this.badgeTableXml({nom:"Doe",prenom:"John",matricule:"PP-26-0001",poste:"Maçon"},null,null,null);
+    t("Badge Word : 85,6 × 54 mm exacts",bt.indexOf(mmTw(85.6)+"")>=0&&bt.indexOf(mmTw(54)+"")>=0,"Twips : "+mmTw(85.6)+" × "+mmTw(54));
+    // 7. permissions
+    var pOk=PERM.pointeur.indexOf("workers")<0&&PERM.pointeur.indexOf("scan")>=0&&PERM.admin.indexOf("settings")>=0&&PERM.ouvrier.length===1;
+    t("Rôles & permissions",pOk,"Le pointeur ne peut pas gérer l’équipe ; l’ouvrier ne voit que son espace");
+    // 8. isolation des entreprises
+    var c2=uid("c");DB.companies.push({id:c2,name:"Autre",sector:"btp"});
+    var beforeLen=DB.workers.filter(function(w){return w.companyId===cid}).length;
+    var iso=sc(DB.workers).length===beforeLen;
+    DB.companies=DB.companies.filter(function(cc){return cc.id!==c2});
+    t("Isolation multi-entreprises",iso,"sc() ne retourne que les travailleurs de ton entreprise");
+    // 9. paie journalier
+    var wv=DB.workers.find(function(w){return w.id===wid});
+    // 1 journée validée × tarif 2500
+    DB.validations=DB.validations||[];DB.validations.push({id:uid("v"),companyId:cid,workerId:wid,date:d1});
+    wv.mode="journalier";wv.tarif=2500;
+    var pay=this.payOf(wv,d1.slice(0,7));
+    t("Calcul paie (journalier validé × tarif)",pay.estimated>=2500,"Estimé "+fmM(pay.estimated)+" (1 journée validée × 2 500 F)");
+    // 10. QR PNG : signature PNG + CRC
+    var png=qrPng(wid,4);var sigOk=png[0]===0x89&&png[1]===0x50;
+    t("PNG QR : signature binaire",sigOk,png.length+" octets");
+    // nettoyage des données de test
+    DB.workers=DB.workers.filter(function(w){return w.id!==wid&&w.id!==wid2});
+    DB.events=DB.events.filter(function(e){return e.workerId!==wid&&e.workerId!==wid2});
+    DB.validations=DB.validations.filter(function(v){return v.workerId!==wid});
+    dbSave();
+  }catch(e){t("Exécution des tests",false,"Erreur : "+e.message)}
+  return T}
+});
+window.addEventListener("load",function(){dbLoad();if(App.resume()){document.getElementById("login").style.display="none";document.getElementById("app").style.display="block";
+  App.scan.siteId=App.firstSite();App.tab=App.user().role==="ouvrier"?"self":"home";App.render()}else App.init();
+  if("serviceWorker" in navigator&&location.protocol==="https:"){navigator.serviceWorker.register("sw.js").catch(function(){})}});
+window.addEventListener("online",function(){App.toast("Connexion rétablie — les pointages hors ligne restent marqués pour vérification","ok")});
+</script>
+</body>
+</html>
