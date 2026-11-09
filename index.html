@@ -167,7 +167,7 @@ var GFEXP=new Array(256),GFLOG=new Array(256);
 (function(){var x=1;for(var i=0;i<255;i++){GFEXP[i]=x;GFLOG[x]=i;x<<=1;if(x&0x100)x^=0x11d}GFEXP[255]=GFEXP[0]})();
 function gmul(a,b){if(!a||!b)return 0;return GFEXP[(GFLOG[a]+GFLOG[b])%255]}
 function rsGen(n){var g=[1];for(var i=0;i<n;i++){var a=GFEXP[i],ng=new Array(g.length+1);
-  for(var k=0;k<=g.length;k++)ng[k]=((k<g.length?g[k]:0)^(k>0?gmul(a,g[k-1]):0));g=ng}return g.reverse()}
+  for(var k=0;k<=g.length;k++)ng[k]=((k<g.length?g[k]:0)^(k>0?gmul(a,g[k-1]):0));g=ng}return g}
 function rsEnc(msg,n){var gen=rsGen(n),res=msg.slice();for(var k=0;k<n;k++)res.push(0);
   for(var i=0;i<msg.length;i++){var f=res[i];if(f)for(var j=1;j<gen.length;j++)res[i+j]^=gmul(gen[j],f)}
   return res.slice(msg.length)}
@@ -191,7 +191,7 @@ function qrEncode(str){
   finder(0,0);finder(size-7,0);finder(0,size-7);
   for(var i=8;i<size-8;i++){if(m[6][i]===null)m[6][i]=i%2===0;if(m[i][6]===null)m[i][6]=i%2===0}
   var ac=size===25?18:size===29?22:-1;
-  if(ac>0)[[6,ac],[ac,6],[ac,ac]].forEach(function(q){
+  if(ac>0)[[ac,ac]].forEach(function(q){
     for(var dy=-2;dy<=2;dy++)for(var dx=-2;dx<=2;dx++){var x=q[0]+dx,y=q[1]+dy;
       if(m[y]&&m[y][x]===null)m[y][x]=Math.max(Math.abs(dx),Math.abs(dy))!==1}});
   m[size-8][8]=true;
@@ -213,6 +213,168 @@ function qrPng(str,scale){var q=qrEncode(str),quiet=4,n=q.size+quiet*2,px=scale|
     pix[y*w+x]=(mx>=0&&my>=0&&mx<q.size&&my<q.size&&q.m[my][mx])?0:255}
   return pngGray(w,w,pix)}
 function qrDataUrl(str,px){return"data:image/png;base64,"+b64enc(qrPng(str,px||8))}
+// ---- LECTEUR QR LOGICIEL (décodage d'une image, sans BarcodeDetector) ----
+function ginv(a){return GFEXP[255-GFLOG[a]]}
+function rsPolyEval(p,x){var v=0;for(var i=p.length-1;i>=0;i--)v=gmul(v,x)^p[i];return v}
+function rsDecode(cw,ec){
+  var N=cw.length,S=[];
+  for(var i=0;i<ec;i++){var s=0,ai=GFEXP[i];for(var j=0;j<N;j++)s=gmul(s,ai)^cw[j];S.push(s)}
+  var any=false;for(i=0;i<ec;i++)if(S[i])any=true;
+  if(!any)return 0;
+  var C=[1],B=[1],L=0,mm=1,b=1;
+  for(var n=0;n<ec;n++){
+    var d=S[n];
+    for(var i2=1;i2<=L;i2++)d^=gmul(C[i2],S[n-i2]);
+    if(d===0){mm++}
+    else if(2*L<=n){
+      var T=C.slice();var coef=gmul(d,ginv(b));
+      while(C.length<B.length+mm)C.push(0);
+      for(i2=0;i2<B.length;i2++)C[i2+mm]^=gmul(coef,B[i2]);
+      L=n+1-L;B=T;b=d;mm=1;
+    }else{
+      var coef2=gmul(d,ginv(b));
+      while(C.length<B.length+mm)C.push(0);
+      for(i2=0;i2<B.length;i2++)C[i2+mm]^=gmul(coef2,B[i2]);
+      mm++;
+    }
+  }
+  if(L===0||L>ec/2)return -1;
+  var pos=[];
+  for(var j=0;j<N;j++){if(rsPolyEval(C,ginv(GFEXP[j%255]))===0)pos.push(N-1-j)}
+  if(pos.length!==L)return -1;
+  var Om=new Array(ec);for(var i3=0;i3<ec;i3++){var acc=0;
+    for(var k=0;k<=i3;k++)acc^=gmul(S[k],C[i3-k]);Om[i3]=acc;}
+  var dC=[];for(var i4=1;i4<C.length;i4+=2)dC.push(C[i4]);
+  function dCEval(x){var v=0;for(var q=dC.length-1;q>=0;q--)v=gmul(v,gmul(x,x))^dC[q];return v}
+  for(var q2=0;q2<pos.length;q2++){
+    var X=GFEXP[(N-1-pos[q2])%255],Xi=ginv(X);
+    var num=rsPolyEval(Om,Xi),den=dCEval(Xi);
+    if(!den)return -1;
+    var Y=gmul(X,gmul(num,ginv(den)));
+    cw[pos[q2]]^=Y;
+  }
+  for(var i5=0;i5<ec;i5++){var s3=0,ai2=GFEXP[i5];for(var j2=0;j2<N;j2++)s3=gmul(s3,ai2)^cw[j2];if(s3)return -1}
+  return L;
+}
+function qrDecodeVideo(v){var W=v.videoWidth,H=v.videoHeight;if(!W||!H)return null;
+  var S=420,sc2=Math.min(1,S/Math.min(W,H)),cw=Math.round(W*sc2),ch=Math.round(H*sc2);
+  var cv=qrDecodeVideo.cv||(qrDecodeVideo.cv=document.createElement("canvas"));
+  cv.width=cw;cv.height=ch;
+  var g=cv.getContext("2d");g.drawImage(v,0,0,cw,ch);
+  var d=g.getImageData(0,0,cw,ch),px=d.data,gray=new Uint8Array(cw*ch);
+  for(var i=0,j=0;i<px.length;i+=4,j++)gray[j]=(px[i]*3+px[i+1]*4+px[i+2])>>3;
+  try{return qrDecodeGray(gray,cw,ch)}catch(e){return null}}
+function qrDecodeGray(gray,w,h){
+  // 1. binarisation Otsu
+  var hist=new Array(256);for(var i=0;i<256;i++)hist[i]=0;
+  for(i=0;i<gray.length;i++)hist[gray[i]]++;
+  var sum=0;for(i=0;i<256;i++)sum+=i*hist[i];
+  var sumB=0,wB=0,max=0,th=128;
+  for(i=0;i<256;i++){wB+=hist[i];if(!wB)continue;var wF=gray.length-wB;if(!wF)break;
+    sumB+=i*hist[i];var mB=sumB/wB,mF=(sum-sumB)/wF,vr=wB*wF*(mB-mF)*(mB-mF);
+    if(vr>max){max=vr;th=i}}
+  var bin=new Uint8Array(w*h);
+  for(i=0;i<gray.length;i++)bin[i]=gray[i]<=th?1:0;
+  // 2. recherche des 3 motifs de repérage (ratio 1:1:3:1:1)
+  function ratioOK(r){var u=(r[0]+r[1]+r[2]+r[3]+r[4])/7;
+    return Math.abs(r[0]-u)<u*0.75&&Math.abs(r[1]-u)<u*0.75&&Math.abs(r[3]-u)<u*0.75&&Math.abs(r[4]-u)<u*0.75&&Math.abs(r[2]-3*u)<u*0.95}
+  var cand=[];
+  for(var y=0;y<h;y++){var x0=y*w,cur=bin[x0],len=1,runs=[],vals=[],starts=[];
+    for(var x=1;x<=w;x++){var b=x<w?bin[x0+x]:1-cur;
+      if(b===cur)len++;else{runs.push(len);vals.push(cur);starts.push(x-len);cur=b;len=1}}
+    for(i=0;i+4<runs.length;i++){
+      if(vals[i]===1&&vals[i+1]===0&&vals[i+2]===1&&vals[i+3]===0&&vals[i+4]===1){
+        var r=[runs[i],runs[i+1],runs[i+2],runs[i+3],runs[i+4]],tt=r[0]+r[1]+r[2]+r[3]+r[4];
+        if(ratioOK(r)&&tt>=14)cand.push({x:starts[i]+r[0]+r[1]+r[2]/2,y:y,s:tt})}}}
+  if(cand.length<3)return null;
+  // vérification verticale
+  var keep=[];
+  cand.forEach(function(c){var m=c.s/7,X=Math.round(c.x),Y=Math.round(c.y),k;
+    var dUp=0;for(k=Y;k>=0;k--){if(bin[k*w+X])dUp++;else break}
+    var dDn=0;for(k=Y+1;k<h;k++){if(bin[k*w+X])dDn++;else break}
+    var lUp=0;for(k=Y-dUp;k>=0;k--){if(!bin[k*w+X])lUp++;else break}
+    var lDn=0;for(k=Y+dDn;k<h;k++){if(!bin[k*w+X])lDn++;else break}
+    var dTot=dUp+dDn;
+    if(Math.abs(dTot-3*m)<m*1.2&&Math.abs(lUp-m)<m*1.2&&Math.abs(lDn-m)<m*1.2)keep.push({x:c.x,y:Y+(dDn-dUp+1)/2,s:c.s})});
+  if(keep.length<3)return null;
+  // fusion des candidats proches (médiane robuste aux faux positifs)
+  var finals=[];
+  keep.forEach(function(c){var f=null;
+    for(var j=0;j<finals.length;j++){var o=finals[j],ms=o.s<c.s?o.s:c.s;if(Math.abs(o.x-c.x)<ms*0.8&&Math.abs(o.y-c.y)<ms*0.8){f=o;break}}
+    if(f)f.pts.push(c);
+    else finals.push({x:c.x,y:c.y,s:c.s,pts:[c]})});
+  finals.forEach(function(f){
+    f.pts.sort(function(a,b){return a.x-b.x});
+    f.x=f.pts[Math.floor(f.pts.length/2)].x;
+    f.pts.sort(function(a,b){return a.y-b.y});
+    f.y=f.pts[Math.floor(f.pts.length/2)].y;
+    f.s=f.pts[Math.floor(f.pts.length/2)].s});
+  if(finals.length<3)return null;
+  // coins : TL (min x+y), TR (max x-y), BL (min x-y)
+  var TL=finals[0],TR=null,BL=null,best=1e18;
+  finals.forEach(function(c){if(c.x+c.y<best){best=c.x+c.y;TL=c}});
+  best=-1e18;finals.forEach(function(c){if(c.x-c.y>best){best=c.x-c.y;TR=c}});
+  best=1e18;finals.forEach(function(c){if(c.x-c.y<best){best=c.x-c.y;BL=c}});
+  if(TL===TR||TL===BL||TR===BL)return null;
+  // raffinement sub-pixel : centre de gravité des pixels sombres du carré central de chaque motif
+  function refine(c){var m2=c.s/7,x0=Math.round(c.x),y0=Math.round(c.y),sx=0,sy=0,wt=0;
+    for(var yy=Math.round(y0-m2*1.5);yy<=Math.round(y0+m2*1.5);yy++)
+      for(var xx=Math.round(x0-m2*1.5);xx<=Math.round(x0+m2*1.5);xx++){
+        if(xx<0||yy<0||xx>=w||yy>=h)continue;
+        var g2=255-gray[yy*w+xx];
+        if(g2>128){sx+=xx*g2;sy+=yy*g2;wt+=g2}}
+    if(wt>0){c.x=sx/wt;c.y=sy/wt}}
+  refine(TL);refine(TR);refine(BL);
+  var mod=TL.s/7;
+  var dT=Math.sqrt((TR.x-TL.x)*(TR.x-TL.x)+(TR.y-TL.y)*(TR.y-TL.y));
+  var dB=Math.sqrt((BL.x-TL.x)*(BL.x-TL.x)+(BL.y-TL.y)*(BL.y-TL.y));
+  if(dT<10||dB<10||Math.abs(dT-dB)>Math.max(dT,dB)*0.35)return null;
+  var size=Math.round((dT+dB)/(2*mod))+7;
+  size=size<=23?21:size<=27?25:29;
+  // 3. repère des modules fonctionnels (identique à l'encodeur)
+  var fmask=new Uint8Array(size*size);
+  function fm(x,y){if(x>=0&&y>=0&&x<size&&y<size)fmask[y*size+x]=1}
+  function fmFind(cx,cy){for(var dy=-1;dy<=7;dy++)for(var dx=-1;dx<=7;dx++)fm(cx+dx,cy+dy)}
+  fmFind(0,0);fmFind(size-7,0);fmFind(0,size-7);
+  for(i=8;i<size-8;i++){fm(6,i);fm(i,6)}
+  var ac=size===25?18:size===29?22:-1;
+  if(ac>0)[[ac,ac]].forEach(function(q){for(var dy=-2;dy<=2;dy++)for(var dx=-2;dx<=2;dx++)fm(q[0]+dx,q[1]+dy)});
+  fm(size-8,8);
+  var c1=[[0,8],[1,8],[2,8],[3,8],[4,8],[5,8],[7,8],[8,8],[8,7],[8,5],[8,4],[8,3],[8,2],[8,1],[8,0]];
+  var c2=[[8,size-1],[8,size-2],[8,size-3],[8,size-4],[8,size-5],[8,size-6],[8,size-7],[8,size-8],[size-7,8],[size-6,8],[size-5,8],[size-4,8],[size-3,8],[size-2,8],[size-1,8]];
+  for(i=0;i<15;i++){fm(c1[i][0],c1[i][1]);fm(c2[i][0],c2[i][1])}
+  // 5. paramètres de version + échantillonnage affine + démasquage (masque 0)
+  var sp=null;for(i=0;i<QRSPC.length;i++)if(QRSPC[i].n===size){sp=QRSPC[i];break}
+  if(!sp)return null;
+  var N=sp.dc+sp.ec;
+  var ux={x:(TR.x-TL.x)/(size-7),y:(TR.y-TL.y)/(size-7)};
+  var uy={x:(BL.x-TL.x)/(size-7),y:(BL.y-TL.y)/(size-7)};
+  function samp(mx,my){
+    var X=TL.x+(mx-3)*ux.x+(my-3)*uy.x,Y=TL.y+(mx-3)*ux.y+(my-3)*uy.y;
+    var v=0,cnt=0,off=[[-0.25,-0.25],[0.25,-0.25],[-0.25,0.25],[0.25,0.25]];
+    for(var k=0;k<4;k++){var xx=Math.round(X+off[k][0]*ux.x+off[k][1]*uy.x),yy=Math.round(Y+off[k][0]*ux.y+off[k][1]*uy.y);
+      if(xx>=0&&yy>=0&&xx<w&&yy<h){v+=bin[yy*w+xx];cnt++}}
+    return cnt?v/cnt:1}
+  var bits="";
+  for(var right=size-1;right>0;right-=2){
+    if(right===6)right--;
+    for(var vert=0;vert<size;vert++)for(var j=0;j<2;j++){
+      var x2=right-j,up=((right+1)&2)===0,y2=up?(size-1-vert):vert;
+      if(!fmask[y2*size+x2]&&bits.length<N*8){
+        var v=samp(x2,y2)>0.5;
+        if((x2+y2)%2===0)v=!v;
+        bits+=v?"1":"0"}}}
+  // 6. codewords + correction d'erreurs Reed-Solomon (jusqu'à ec/2 erreurs)
+  if(bits.length<N*8)return null;
+  var cw=[];for(i=0;i<N;i++)cw.push(parseInt(bits.substr(i*8,8),2));
+  if(rsDecode(cw,sp.ec)<0)return null;
+  // 6. lecture du contenu (mode octets)
+  var bs="";for(i=0;i<sp.dc;i++)bs+=("00000000"+cw[i].toString(2)).slice(-8);
+  if(bs.substr(0,4)!=="0100")return null;
+  var ln=parseInt(bs.substr(4,8),2);
+  if(ln<1||ln>sp.dc-2)return null;
+  var out="";for(i=0;i<ln;i++)out+=String.fromCharCode(parseInt(bs.substr(12+i*8,8),2));
+  return out}
 // ---- DOCX / XLSX ----
 function escX(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 var MM_TW=56.6929,MM_EMU=36000;
@@ -699,7 +861,7 @@ vScan:function(){if(!can("scan"))return this.deny();
   "<div id=\"lastScan\"></div><div id=\"recentScans\" style=\"margin-top:8px\">"+this.recentScansHtml()+"</div>"
   :
   "<div style=\"text-align:center;padding:20px 0\">"+
-  (window.BarcodeDetector?"":"<div class=\"msg inf\">📷 Ton navigateur n’a pas de lecteur QR natif : POINTPRO chargera automatiquement un lecteur universel au premier scan (une connexion internet est nécessaire la première fois). La saisie manuelle reste disponible en secours.</div>")+
+  (window.BarcodeDetector?"":"<div class=\"msg inf\">📷 Lecteur QR intégré à l’app : le scan fonctionne sur ce navigateur — présente simplement le badge dans le cadre.</div>")+
   "<button class=\"bigbtn\" onclick=\"App.startScan()\">📷 DÉMARRER LE SCAN CONTINU</button>"+
   "<div class=\"card\" style=\"margin-top:14px;text-align:left\"><h3>⌨️ Saisie manuelle</h3>"+
   "<label class=\"fld\">Identifiant du badge ou matricule</label><input id=\"manualTk\" placeholder=\"Ex : PP-26-0001\">"+
@@ -721,56 +883,32 @@ closeSession:function(){var s=this.todaySession();if(!s)return;
   audit("close","session",s.id,null,s.summary,"");dbSave();this.toast("Session clôturée","ok");this.render()},
 startScan:function(){var self=this;
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){this.toast("Caméra indisponible : utilise la saisie manuelle","no");return}
-  this.scan.on=true;this.scan.count=0;this.scan.ok=0;this.scan.rej=0;this.scan.last=[];this.scan.jsqr=null;
+  this.scan.on=true;this.scan.count=0;this.scan.ok=0;this.scan.rej=0;this.scan.last=[];
   this.render();
   navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:false}).then(function(stream){
     self.scan.stream=stream;
     var v=document.getElementById("scv");if(v){v.srcObject=stream;v.setAttribute("playsinline","true")}
     if(window.BarcodeDetector){try{self.scan.detector=new BarcodeDetector({formats:["qr_code"]})}catch(e){self.scan.detector=null}}
     else self.scan.detector=null;
-    if(self.scan.detector){self.scanLoop()}
-    else{
-      var st=document.getElementById("scanStatus");if(st)st.innerHTML="⏳ Chargement du lecteur QR universel…";
-      self.loadJsQr().then(function(J){self.scan.jsqr=J;
-        var s2=document.getElementById("scanStatus");if(s2)s2.innerHTML="Scanne un badge…";
-        self.scanLoop()})
-      .catch(function(){var s3=document.getElementById("scanStatus");
-        if(s3)s3.innerHTML="Lecteur non chargé (pas de connexion ?) : utilise la saisie manuelle ci-dessous."})}
+    if(!self.scan.detector){document.getElementById("scanStatus").innerHTML="📷 Lecteur QR intégré actif — présente le badge dans le cadre";}
+    self.scanLoop();
   }).catch(function(e){self.scan.on=false;self.toast("Accès caméra refusé : "+e.message,"no");self.render()})},
-loadJsQr:function(){var self=this;
-  if(window.jsQR)return Promise.resolve(window.jsQR);
-  if(this._jsqrP)return this._jsqrP;
-  var urls=["https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js","https://unpkg.com/jsqr@1.4.0/dist/jsQR.js","https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"];
-  this._jsqrP=new Promise(function(res,rej){
-    function tryOne(i){if(i>=urls.length){rej(new Error("CDN inaccessible"));return}
-      var s=document.createElement("script");s.src=urls[i];
-      s.onload=function(){window.jsQR?res(window.jsQR):tryOne(i+1)};
-      s.onerror=function(){tryOne(i+1)};
-      document.head.appendChild(s)}
-    tryOne(0)});
-  return this._jsqrP},
 scanLoop:function(){var self=this;if(!this.scan.on)return;
   var v=document.getElementById("scv");if(!v)return;
   if(this.scan.detector){
     this.scan.detector.detect(v).then(function(codes){
       if(codes&&codes.length){var raw=codes[0].rawValue;self.handleScan(raw)}
       setTimeout(function(){self.scanLoop()},450)}).catch(function(){setTimeout(function(){self.scanLoop()},800)})}
-  else if(this.scan.jsqr){
-    try{
-      var vW=v.videoWidth||640,vH=v.videoHeight||480;
-      var cv=this.scan.cv||(this.scan.cv=document.createElement("canvas"));
-      if(cv.width!==vW||cv.height!==vH){cv.width=vW;cv.height=vH}
-      var ctx=cv.getContext("2d",{willReadFrequently:true});
-      ctx.drawImage(v,0,0,vW,vH);
-      var img=ctx.getImageData(0,0,vW,vH);
-      var code=this.scan.jsqr(img.data,vW,vH,{inversionAttempts:"dontInvert"});
-      if(code&&code.data){self.handleScan(code.data)}
-    }catch(e){}
-    setTimeout(function(){self.scanLoop()},250)}
-},
+  else this.scanLoopJS()},
+scanLoopJS:function(){var self=this;if(!this.scan.on)return;
+  var v=document.getElementById("scv");if(!v)return;
+  if(v.readyState<2||!v.videoWidth){setTimeout(function(){self.scanLoopJS()},300);return}
+  try{var raw=qrDecodeVideo(v);
+    if(raw){this.handleScan(raw);setTimeout(function(){self.scanLoopJS()},600);return}}catch(e){}
+  setTimeout(function(){self.scanLoopJS()},250)},
 stopScan:function(){this.scan.on=false;
   if(this.scan.stream){this.scan.stream.getTracks().forEach(function(t){t.stop()});this.scan.stream=null}
-  this.scan.detector=null;this.scan.jsqr=null;this.render()},
+  this.scan.detector=null;this.render()},
 toggleTorch:function(){var tr=this.scan.stream&&this.scan.stream.getVideoTracks()[0];
   if(tr&&tr.applyConstraints&&tr.getCapabilities&&tr.getCapabilities().torch){
     this.torchOn=!this.torchOn;var self=this;
