@@ -533,7 +533,8 @@ workerSheet:function(id,isNew){var w=this.workerById(id);if(!w)return;
   "<span class=\"pill "+(b?"ok":"no")+"\">badge "+(b?"actif":"révoqué")+"</span></div></div>"+
   "<div class=\"card\" style=\"margin-top:12px\"><h3>Heures travaillées</h3>"+this.hoursTabsHtml(w)+"</div>"+
   "<div class=\"card\" style=\"margin-top:14px\"><h3>Badge d’identification</h3>"+this.badgeHtml(w)+
-  "<div class=\"grid2\" style=\"margin-top:12px\">"+
+  "<div class=\"grid3\" style=\"margin-top:12px\">"+
+  "<button class=\"btn sm\" onclick=\"App.badgePng('"+w.id+"')\">🖼️ Image (.png)</button>"+
   "<button class=\"btn sm\" onclick=\"App.badgeDocx('"+w.id+"')\">📄 Word (.docx)</button>"+
   "<button class=\"btn sm\" onclick=\"App.printBadges(['"+w.id+"'])\">🖨️ Imprimer / PDF</button></div></div>"+
   "<div class=\"grid2\"><button class=\"btn sm\" onclick=\"App.editWorkerSheet('"+w.id+"')\">✏️ Modifier</button>"+
@@ -594,8 +595,8 @@ badgeTableXml:function(w,ridQ,ridP,ridL){var c=this.myCompany(),b=this.badgeOf(w
   function p(run){return"<w:p><w:pPr><w:spacing w:after=\"0\" w:line=\"0\" w:lineRule=\"exact\"/></w:pPr>"+(run||"")+"</w:p>"}
   function t(s,sz,bold,color){return"<w:r><w:rPr>"+(bold?"<w:b/>":"")+"<w:color w:val=\""+(color||"1e293b")+"\"/><w:sz w:val=\""+sz+"\"/></w:rPr><w:t>"+escX(s)+"</w:t></w:r>"}
   // disposition : table à 1 ligne, 3 colonnes (photo 22mm | identité | QR 22mm)
-  return"<w:tbl><w:tblPr><w:tblW w:w=\""+mtw+"\" w:type=\"dxa\"/><w:tblLayout w:type=\"fixed\"/>"+
-  "<w:tblBorders>"+["top","left","bottom","right"].map(function(s){return"<w:"+s+" w:val=\"single\" w:sz=\"12\" w:color=\"1e293b\"/>"}).join("")+"</w:tblBorders></w:tblPr>"+
+  return"<w:tbl><w:tblPr><w:tblW w:w=\""+mtw+"\" w:type=\"dxa\"/>"+
+  "<w:tblBorders>"+["top","left","bottom","right"].map(function(s){return"<w:"+s+" w:val=\"single\" w:sz=\"12\" w:color=\"1e293b\"/>"}).join("")+"</w:tblBorders><w:tblLayout w:type=\"fixed\"/></w:tblPr>"+
   "<w:tblGrid><w:gridCol w:w=\""+mmTw(26)+"\"/><w:gridCol w:w=\""+(mtw-mmTw(26)-mmTw(24))+"\"/><w:gridCol w:w=\""+mmTw(24)+"\"/></w:tblGrid>"+
   "<w:tr><w:trPr><w:trHeight w:val=\""+mh+"\" w:hRule=\"exact\"/></w:trPr>"+
   // photo
@@ -625,7 +626,39 @@ docxForBadges:function(list){var self=this,rels="",files=[],rid=100;
       files.push({name:"word/media/lg"+i+".png",data:b64dec(l64)})}else rl=null;
     xml+=self.badgeTableXml(w,rq,rp,rl);
     if(i<list.length-1)xml+="<w:p><w:pPr><w:spacing w:after=\"60\"/></w:pPr></w:p>"});
-  return buildDocx(xml,{rels:rels,files:files})},
+  return buildDocx(xml+"<w:p><w:pPr><w:spacing w:after=\"0\"/></w:pPr></w:p>",{rels:rels,files:files})},
+badgePng:function(id){var self=this,w=this.workerById(id);if(!w)return;
+  var b=this.badgeOf(w.id),c=this.myCompany(),cv=document.createElement("canvas");
+  cv.width=856;cv.height=540;var g=cv.getContext("2d");
+  var qr=new Image(),ph=new Image(),hasQr=!!b,hasPh=!!w.photo;
+  if(hasQr)qr.src=qrDataUrl(b.token,6);
+  if(hasPh)ph.src=w.photo;
+  var n=0,need=(hasQr?1:0)+(hasPh?1:0);
+  function done(){if(++n>=need)setTimeout(draw,50)}
+  function draw(){
+    g.fillStyle="#0f172a";g.fillRect(0,0,856,540);
+    g.fillStyle="#0e7490";g.fillRect(0,0,222,540);
+    g.strokeStyle="#22d3ee";g.lineWidth=5;g.strokeRect(8,8,840,524);
+    g.fillStyle="#334155";g.fillRect(26,26,170,220);
+    if(hasPh&&ph.complete&&ph.naturalWidth){g.save();g.beginPath();g.rect(26,26,170,220);g.clip();g.drawImage(ph,26,26,170,220);g.restore()}
+    else{g.fillStyle="#94a3b8";g.font="bold 26px Arial";g.textAlign="center";g.fillText("PHOTO",111,145)}
+    g.fillStyle="#fff";g.font="bold 20px Arial";g.textAlign="center";g.fillText(w.matricule,111,290);
+    g.textAlign="left";g.fillStyle="#22d3ee";g.font="bold 24px Arial";
+    g.fillText(String(c?c.name:"").slice(0,32),252,72);
+    g.fillStyle="#fff";g.font="bold 46px Arial";g.fillText(String(w.prenom+" "+w.nom).slice(0,22),252,150);
+    g.fillStyle="#cbd5e1";g.font="bold 27px Arial";g.fillText(String(w.poste||"Travailleur").slice(0,28),252,205);
+    g.fillStyle="#e2e8f0";g.font="bold 25px Arial";g.fillText("ID : "+w.matricule,252,258);
+    g.fillStyle="#94a3b8";g.font="bold 18px Arial";g.fillText("Badge officiel — à présenter au pointage",252,305);
+    g.fillStyle="#64748b";g.font="16px Arial";g.fillText((c&&c.ville?String(c.ville).slice(0,24):"")+" · POINTPRO",252,340);
+    if(hasQr&&qr.complete&&qr.naturalWidth){g.drawImage(qr,620,325,200,200)}
+    g.fillStyle="#22d3ee";g.font="bold 21px Arial";g.textAlign="center";g.fillText("POINTPRO",720,312);
+    cv.toBlob(function(blob){if(!blob){self.toast("Erreur génération image","no");return}
+      var u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download="badge_"+w.matricule+".png";document.body.appendChild(a);a.click();a.remove();
+      setTimeout(function(){URL.revokeObjectURL(u)},4000);
+      self.toast("Badge image téléchargé ✅ Imprime-le depuis ta galerie (format carte 85,6 × 54 mm)","ok")},"image/png")}
+  if(!need)draw();
+  else{if(hasQr){qr.onload=done;qr.onerror=done}if(hasPh){ph.onload=done;ph.onerror=done}}
+},
 badgeDocx:function(id){var w=this.workerById(id);if(!w)return;
   try{dl(this.docxForBadges([w]),"badge_"+w.matricule+".docx");this.toast("Badge Word téléchargé ✅","ok");this.closeSheet()}
   catch(e){this.toast("Erreur export : "+e.message,"no")}},
