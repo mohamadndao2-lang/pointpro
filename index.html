@@ -218,7 +218,7 @@ function escX(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").rep
 var MM_TW=56.6929,MM_EMU=36000;
 function mmTw(mm){return Math.round(mm*MM_TW)}
 function mmEmu(mm){return Math.round(mm*MM_EMU)}
-function docxImg(rid,wmm,hmm){return"<w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\"><wp:extent cx=\""+mmEmu(wmm)+"\" cy=\""+mmEmu(hmm)+"\"/><wp:docPr id=\"1\" name=\"img\"/><a:graphic xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:nvPicPr><pic:cNvPr id=\"0\" name=\"img\"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed=\""+rid+"\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\""+mmEmu(wmm)+"\" cy=\""+mmEmu(hmm)+"\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>"}
+var DOCXIMG_N=0;function docxImg(rid,wmm,hmm){DOCXIMG_N++;var _di=DOCXIMG_N;return"<w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\"><wp:extent cx=\""+mmEmu(wmm)+"\" cy=\""+mmEmu(hmm)+"\"/><wp:docPr id=\""+_di+"\" name=\"img"+_di+"\"/><a:graphic xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:nvPicPr><pic:cNvPr id=\""+_di+"\" name=\"pic"+_di+"\"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed=\""+rid+"\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\""+mmEmu(wmm)+"\" cy=\""+mmEmu(hmm)+"\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>"}
 function buildDocx(bodyXml,images){ // images:[{rid,parts:[{name,data}]}] simplifié : passer parts directement + rels
   var rels="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"+images.rels+"</Relationships>";
   var ct="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"png\" ContentType=\"image/png\"/><Default Extension=\"jpeg\" ContentType=\"image/jpeg\"/><Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/><Override PartName=\"/word/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml\"/></Types>";
@@ -492,7 +492,7 @@ addWorkerSheet:function(){var sites=sc(DB.sites);
   "<label class=\"fld\">Nom *</label><input id=\"w_nom\" placeholder=\"Ex : Diop\">"+
   "<label class=\"fld\">Prénom *</label><input id=\"w_prenom\" placeholder=\"Ex : Mamadou\">"+
   "<label class=\"fld\">"+this.T("worker")+" / métier</label><input id=\"w_poste\" placeholder=\"Ex : Maçon / Agent / Opérateur\">"+
-  "<label class=\"fld\">"+this.T("site")+" d’affectation</label><select id=\"w_site\">"+sites.map(function(s){return"<option value=\""+s.id+"\">"+esc(s.nom)+"</option>"}).join("")+"</select>"+
+  "<label class=\"fld\">"+this.T("site")+" d’affectation</label><select id=\"w_site\" onchange=\"App.siteSelChg(this)\">"+sites.map(function(s){return"<option value=\""+s.id+"\">"+esc(s.nom)+"</option>"}).join("")+"<option value=\"__new__\">➕ Nouveau "+this.T("site").toLowerCase()+"…</option></select>"+
   "<div class=\"grid2\"><div><label class=\"fld\">Mode de paie</label><select id=\"w_mode\"><option value=\"journalier\">Journalier (par jour)</option><option value=\"horaire\">Horaire</option><option value=\"mensuel\">Mensuel</option><option value=\"forfait\">Forfait</option></select></div>"+
   "<div><label class=\"fld\">Montant à payer par jour (F CFA)</label><input id=\"w_tarif\" type=\"number\" inputmode=\"numeric\" value=\"0\"></div></div>"+
   "<div class=\"grid2\"><div><label class=\"fld\">Premier jour de travail *</label><input id=\"w_dd\" type=\"date\" value=\""+today()+"\"></div>"+
@@ -554,7 +554,7 @@ editWorkerSheet:function(id){var w=this.workerById(id),sites=sc(DB.sites);
   this.sheet("<div class=\"h\" style=\"margin-bottom:10px\">Modifier la fiche</div>"+
   "<label class=\"fld\">Nom</label><input id=\"e_nom\" value=\""+esc(w.nom)+"\"><label class=\"fld\">Prénom</label><input id=\"e_prenom\" value=\""+esc(w.prenom)+"\">"+
   "<label class=\"fld\">Métier / poste</label><input id=\"e_poste\" value=\""+esc(w.poste||"")+"\">"+
-  "<label class=\"fld\">"+this.T("site")+"</label><select id=\"e_site\">"+sites.map(function(s){return"<option value=\""+s.id+"\""+(s.id===w.siteId?" selected":"")+">"+esc(s.nom)+"</option>"}).join("")+"</select>"+
+  "<label class=\"fld\">"+this.T("site")+"</label><select id=\"e_site\" onchange=\"App.siteSelChg(this)\">"+sites.map(function(s){return"<option value=\""+s.id+"\""+(s.id===w.siteId?" selected":"")+">"+esc(s.nom)+"</option>"}).join("")+"<option value=\"__new__\">➕ Nouveau "+this.T("site").toLowerCase()+"…</option></select>"+
   "<div class=\"grid2\"><div><label class=\"fld\">Mode de paie</label><select id=\"e_mode\">"+["journalier","horaire","mensuel","forfait"].map(function(m){return"<option"+(m===w.mode?" selected":"")+">"+m+"</option>"}).join("")+"</select></div>"+
   "<div><label class=\"fld\">Montant à payer par jour (F CFA)</label><input id=\"e_tarif\" type=\"number\" value=\""+w.tarif+"\"></div></div>"+
   "<div class=\"grid2\"><div><label class=\"fld\">Premier jour de travail</label><input id=\"e_dd\" type=\"date\" value=\""+(w.dateDebut||"")+"\"></div>"+
@@ -571,6 +571,13 @@ saveEditWorker:function(id){var w=this.workerById(id);if(!w)return;
   dbSave();this.closeSheet();this.toast("Fiche mise à jour","ok");this.render()},
 toggleWorker:function(id){var w=this.workerById(id);w.statut=w.statut==="actif"?"suspendu":"actif";
   audit("status","worker",id,null,{statut:w.statut},"");dbSave();this.toast("Statut : "+w.statut,"ok");this.closeSheet();this.render()},
+siteSelChg:function(sel){if(sel.value!=="__new__"){sel.setAttribute("data-prev",sel.value);return}
+  var n=prompt("Nom du nouveau "+this.T("site").toLowerCase()+" :");
+  if(!n||!n.trim()){sel.value=sel.getAttribute("data-prev")||"";return}
+  var s={id:uid("s"),companyId:this.user().companyId,nom:n.trim(),adresse:"",resp:"",statut:"actif",createdAt:today()};
+  DB.sites.push(s);audit("create","site",s.nom,null,null,"");dbSave();
+  var o=document.createElement("option");o.value=s.id;o.textContent=s.nom;sel.insertBefore(o,sel.options[sel.options.length-1]);
+  sel.value=s.id;sel.setAttribute("data-prev",s.id);this.toast(this.T("site")+" créé ✅","ok")},
 renewBadge:function(id){var w=this.workerById(id);
   if(!confirm("Créer un nouveau badge ? L’ancien QR Code sera révoqué et ne permettra plus de pointer."))return;
   sc(DB.badges).forEach(function(b){if(b.workerId===id){b.status="revoked";b.revokedAt=today()}});
@@ -626,10 +633,12 @@ badgesSheetDocx:function(ids){var list=ids.map(function(id){return App.workerByI
   try{dl(this.docxForBadges(list),"badges_planche_"+today()+".docx");this.toast(list.length+" badge(s) Word ✅","ok")}
   catch(e){this.toast("Erreur export : "+e.message,"no")}},
 printBadges:function(ids){var self=this,list=ids.map(function(id){return self.workerById(id)}).filter(Boolean);
-  var html="<div style='max-width:800px;margin:auto'>"+list.map(function(w){return"<div style='width:85.6mm;height:54mm;margin:4mm auto'>"+self.badgeHtml(w)+"</div>"}).join("")+"</div>";
+  var html="<div style='max-width:800px;margin:auto;padding-top:56px'>"+list.map(function(w){return"<div style='width:85.6mm;height:54mm;margin:4mm auto'>"+self.badgeHtml(w)+"</div>"}).join("")+"</div>";
   var w=window.open("","_blank");if(!w){this.toast("Autorise les fenêtres surgissantes","no");return}
   w.document.write("<!doctype html><html><head><meta charset='utf-8'><title>Badges POINTPRO</title>"+
-  "<style>body{font-family:Arial;background:#fff;margin:10mm}@media print{.b{page-break-after:always}}</style></head><body>"+html.replace(/85\.6mm/g,"width:100%")+"</body></html>");
+  "<style>body{font-family:Arial;background:#fff;margin:10mm}.noprint{position:fixed;top:0;left:0;right:0;padding:10px;background:#0b1220;z-index:9;display:flex;gap:8px;justify-content:center}.noprint button{padding:10px 18px;font-size:15px;border:0;border-radius:10px;background:#0e7490;color:#fff}@media print{.noprint{display:none!important}body{margin:0;padding-top:0}.b{page-break-after:always}}</style></head><body>"+
+  "<div class='noprint'><button onclick='window.close()'>← Retour à l’app</button><button onclick='window.print()'>🖨️ Imprimer / PDF</button></div>"+
+  html.replace(/85\.6mm/g,"width:100%")+"</body></html>");
   w.document.close();setTimeout(function(){w.print()},600)}
 });
 </script>
