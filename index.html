@@ -699,7 +699,7 @@ vScan:function(){if(!can("scan"))return this.deny();
   "<div id=\"lastScan\"></div><div id=\"recentScans\" style=\"margin-top:8px\">"+this.recentScansHtml()+"</div>"
   :
   "<div style=\"text-align:center;padding:20px 0\">"+
-  (window.BarcodeDetector?"":"<div class=\"msg wn\">Ce navigateur n’a pas de lecteur QR natif : le scan caméra nécessitera Chrome Android récent. En attendant, utilise la saisie manuelle ci-dessous — elle enregistre exactement les mêmes données.</div>")+
+  (window.BarcodeDetector?"":"<div class=\"msg inf\">📷 Ton navigateur n’a pas de lecteur QR natif : POINTPRO chargera automatiquement un lecteur universel au premier scan (une connexion internet est nécessaire la première fois). La saisie manuelle reste disponible en secours.</div>")+
   "<button class=\"bigbtn\" onclick=\"App.startScan()\">📷 DÉMARRER LE SCAN CONTINU</button>"+
   "<div class=\"card\" style=\"margin-top:14px;text-align:left\"><h3>⌨️ Saisie manuelle</h3>"+
   "<label class=\"fld\">Identifiant du badge ou matricule</label><input id=\"manualTk\" placeholder=\"Ex : PP-26-0001\">"+
@@ -721,26 +721,56 @@ closeSession:function(){var s=this.todaySession();if(!s)return;
   audit("close","session",s.id,null,s.summary,"");dbSave();this.toast("Session clôturée","ok");this.render()},
 startScan:function(){var self=this;
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){this.toast("Caméra indisponible : utilise la saisie manuelle","no");return}
-  this.scan.on=true;this.scan.count=0;this.scan.ok=0;this.scan.rej=0;this.scan.last=[];
+  this.scan.on=true;this.scan.count=0;this.scan.ok=0;this.scan.rej=0;this.scan.last=[];this.scan.jsqr=null;
   this.render();
   navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:false}).then(function(stream){
     self.scan.stream=stream;
     var v=document.getElementById("scv");if(v){v.srcObject=stream;v.setAttribute("playsinline","true")}
     if(window.BarcodeDetector){try{self.scan.detector=new BarcodeDetector({formats:["qr_code"]})}catch(e){self.scan.detector=null}}
     else self.scan.detector=null;
-    if(!self.scan.detector){document.getElementById("scanStatus").innerHTML="Lecteur natif indisponible sur ce navigateur. Utilise la saisie manuelle.";}
-    self.scanLoop();
+    if(self.scan.detector){self.scanLoop()}
+    else{
+      var st=document.getElementById("scanStatus");if(st)st.innerHTML="⏳ Chargement du lecteur QR universel…";
+      self.loadJsQr().then(function(J){self.scan.jsqr=J;
+        var s2=document.getElementById("scanStatus");if(s2)s2.innerHTML="Scanne un badge…";
+        self.scanLoop()})
+      .catch(function(){var s3=document.getElementById("scanStatus");
+        if(s3)s3.innerHTML="Lecteur non chargé (pas de connexion ?) : utilise la saisie manuelle ci-dessous."})}
   }).catch(function(e){self.scan.on=false;self.toast("Accès caméra refusé : "+e.message,"no");self.render()})},
+loadJsQr:function(){var self=this;
+  if(window.jsQR)return Promise.resolve(window.jsQR);
+  if(this._jsqrP)return this._jsqrP;
+  var urls=["https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js","https://unpkg.com/jsqr@1.4.0/dist/jsQR.js","https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"];
+  this._jsqrP=new Promise(function(res,rej){
+    function tryOne(i){if(i>=urls.length){rej(new Error("CDN inaccessible"));return}
+      var s=document.createElement("script");s.src=urls[i];
+      s.onload=function(){window.jsQR?res(window.jsQR):tryOne(i+1)};
+      s.onerror=function(){tryOne(i+1)};
+      document.head.appendChild(s)}
+    tryOne(0)});
+  return this._jsqrP},
 scanLoop:function(){var self=this;if(!this.scan.on)return;
   var v=document.getElementById("scv");if(!v)return;
   if(this.scan.detector){
     this.scan.detector.detect(v).then(function(codes){
       if(codes&&codes.length){var raw=codes[0].rawValue;self.handleScan(raw)}
       setTimeout(function(){self.scanLoop()},450)}).catch(function(){setTimeout(function(){self.scanLoop()},800)})}
+  else if(this.scan.jsqr){
+    try{
+      var vW=v.videoWidth||640,vH=v.videoHeight||480;
+      var cv=this.scan.cv||(this.scan.cv=document.createElement("canvas"));
+      if(cv.width!==vW||cv.height!==vH){cv.width=vW;cv.height=vH}
+      var ctx=cv.getContext("2d",{willReadFrequently:true});
+      ctx.drawImage(v,0,0,vW,vH);
+      var img=ctx.getImageData(0,0,vW,vH);
+      var code=this.scan.jsqr(img.data,vW,vH,{inversionAttempts:"dontInvert"});
+      if(code&&code.data){self.handleScan(code.data)}
+    }catch(e){}
+    setTimeout(function(){self.scanLoop()},250)}
 },
 stopScan:function(){this.scan.on=false;
   if(this.scan.stream){this.scan.stream.getTracks().forEach(function(t){t.stop()});this.scan.stream=null}
-  this.scan.detector=null;this.render()},
+  this.scan.detector=null;this.scan.jsqr=null;this.render()},
 toggleTorch:function(){var tr=this.scan.stream&&this.scan.stream.getVideoTracks()[0];
   if(tr&&tr.applyConstraints&&tr.getCapabilities&&tr.getCapabilities().torch){
     this.torchOn=!this.torchOn;var self=this;
