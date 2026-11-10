@@ -705,7 +705,7 @@ workerSheet:function(id,isNew){var w=this.workerById(id);if(!w)return;
   this.sheet("<div style=\"display:flex;gap:12px;align-items:center\"><div class=\"avatar\" style=\"width:64px;height:64px\">"+(w.photo?"<img src=\""+w.photo+"\">":"👷")+"</div>"+
   "<div><div class=\"h\" style=\"font-size:17px\">"+esc(w.prenom+" "+w.nom)+"</div><div class=\"mut small\">"+esc(w.matricule)+" · "+esc(w.poste||"—")+" · "+esc(this.siteById(w.siteId)?this.siteById(w.siteId).nom:"—")+"</div>"+
   "<div class=\"mut small\">Du <b>"+dLabel(w.dateDebut)+"</b>"+(w.dateFin?" au <b>"+dLabel(w.dateFin)+"</b>":" · en activité")+"</div>"+
-  "<span class=\"pill "+(b?"ok":"no")+"\">badge "+(b?"actif":"révoqué")+"</span></div></div>"+
+  "<span class=\"pill "+(b?"ok":"no")+"\">badge "+(b?"actif":"supprimé")+"</span></div></div>"+
   "<div class=\"card\" style=\"margin-top:12px\"><h3>Heures travaillées</h3>"+this.hoursTabsHtml(w)+"</div>"+
   "<div class=\"card\" style=\"margin-top:14px\"><h3>Badge d’identification</h3>"+this.badgeHtml(w)+
   "<div class=\"grid3\" style=\"margin-top:12px\">"+
@@ -725,7 +725,7 @@ badgeHtml:function(w){var c=this.myCompany(),b=this.badgeOf(w.id);
   "<div class=\"fn\" style=\"text-align:center;font-size:8px\">"+esc(w.matricule)+"</div></div>"+
   "<div class=\"badge-right\"><div class=\"co\">"+esc(c?c.name:"")+(c&&c.ville?" · "+esc(c.ville):"")+"</div>"+
   "<div><div class=\"nm\">"+esc(w.nom+" "+w.prenom)+"</div><div class=\"fn\">"+esc(w.poste||this.T("worker"))+"</div></div>"+
-  "<div class=\"qr\">"+(b?"<img src=\""+qr+"\">":"<div class=\"mut small\">Badge révoqué</div>")+
+  "<div class=\"qr\">"+(b?"<img src=\""+qr+"\">":"<div class=\"mut small\">Aucun badge actif (supprimé).<br>Appuyez sur 🔄 Nouveau badge pour en créer un autre.</div>")+
   "<div class=\"hint\">Badge officiel.<br>À présenter au pointage.<br>En cas de perte, prévenir le responsable.</div></div></div></div>"},
 editWorkerSheet:function(id){var w=this.workerById(id),sites=sc(DB.sites);
   this.sheet("<div class=\"h\" style=\"margin-bottom:10px\">Modifier la fiche</div>"+
@@ -978,7 +978,7 @@ scanDiag:function(){var v=document.getElementById("scv");
   });
   var out=document.getElementById("scanDiagOut");if(!out)return;
   out.innerHTML="<div class=\"card\" style=\"margin-top:12px\"><h3>🔍 Diagnostic de lecture</h3>"+
-  "<div class=\"small mut\">Caméra : "+W+"×"+H+" px · seuil binarisation : "+thUsed+"</div>"+
+  "<div class=\"small mut\">Caméra : "+W+"×"+H+" px · seuil binarisation : "+thUsed+" · Bibliothèque jsQR : "+(window.jsQR?"chargée ✓":"NON chargée ✗ (internet requis au démarrage)")+"</div>"+
   "<div style=\"margin-top:8px\">"+results.map(function(r){return "<div style=\"padding:3px 0\">"+esc(r)+"</div>"}).join("")+"</div>"+
   "<div class=\"small mut\" style=\"margin-top:8px\">Image telle que le lecteur la voit (binarisée) :</div>"+
   "<img src=\""+binUrl+"\" style=\"width:100%;margin-top:6px;border:1px solid #334155;border-radius:8px;image-rendering:pixelated\">"+
@@ -989,7 +989,11 @@ handleScan:function(raw){raw=String(raw||"").trim();if(!raw)return;
   var self=this;
   // anti-double-scan : même badge ignoré pendant 90 s après un scan
   if(!this.scan.cool)this.scan.cool={};
-  if(this.scan.cool[raw]&&Date.now()-this.scan.cool[raw]<90000)return;
+  if(this.scan.cool[raw]&&Date.now()-this.scan.cool[raw]<90000){
+    var rest=Math.ceil((90000-(Date.now()-this.scan.cool[raw]))/1000);
+    if(!this.scan.coolMsg||Date.now()-this.scan.coolMsg>1500){this.scan.coolMsg=Date.now();
+      this.scanPop(false,"Déjà scanné à l'instant","Nouveau scan de ce badge possible dans "+rest+" s")}
+    return}
   function reject(msg){self.scan.cool[raw]=Date.now();self.scan.count++;self.scan.rej++;self.scanPop(false,"Scan refusé",msg);self.scan.last.unshift({ok:false,nom:raw.slice(0,24),op:msg,time:t,date:self.today(),anomaly:true});
     self.scan.last=self.scan.last.slice(0,10);self.beep(false);self.flash(false);updStatus(msg,false);
     var st=document.getElementById("cRej");if(st)st.textContent=self.scan.rej;
