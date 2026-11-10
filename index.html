@@ -257,13 +257,14 @@ function rsDecode(cw,ec){
   return L;
 }
 function qrDecodeVideo(v){var W=v.videoWidth,H=v.videoHeight;if(!W||!H)return null;
-  var S=420,sc2=Math.min(1,S/Math.min(W,H)),cw=Math.round(W*sc2),ch=Math.round(H*sc2);
   var cv=qrDecodeVideo.cv||(qrDecodeVideo.cv=document.createElement("canvas"));
-  cv.width=cw;cv.height=ch;
-  var g=cv.getContext("2d");g.drawImage(v,0,0,cw,ch);
-  var d=g.getImageData(0,0,cw,ch),px=d.data,gray=new Uint8Array(cw*ch);
-  for(var i=0,j=0;i<px.length;i+=4,j++)gray[j]=(px[i]*3+px[i+1]*4+px[i+2])>>3;
-  try{return qrDecodeGray(gray,cw,ch)}catch(e){return null}}
+  var g=cv.getContext("2d");
+  for(var si=0;si<2;si++){var S=si?640:420,sc2=Math.min(1,S/Math.min(W,H)),cw=Math.round(W*sc2),ch=Math.round(H*sc2);
+    cv.width=cw;cv.height=ch;g.drawImage(v,0,0,cw,ch);
+    var d=g.getImageData(0,0,cw,ch),px=d.data,gray=new Uint8Array(cw*ch);
+    for(var i=0,j=0;i<px.length;i+=4,j++)gray[j]=(px[i]*3+px[i+1]*4+px[i+2])>>3;
+    try{var r=qrDecodeGray(gray,cw,ch);if(r)return r}catch(e){}}
+  return null}
 function qrDecodeGray(gray,w,h){
   // 1. binarisation Otsu
   var hist=new Array(256);for(var i=0;i<256;i++)hist[i]=0;
@@ -925,7 +926,10 @@ manualScan:function(){var t=val("manualTk").trim();if(!t){this.toast("Saisis un 
 handleScan:function(raw){raw=String(raw||"").trim();if(!raw)return;
   var u=this.user(),siteId=this.scan.siteId,d=today(),t=nowTime();
   var self=this;
-  function reject(msg){self.scan.count++;self.scan.rej++;self.scan.last.unshift({ok:false,nom:raw.slice(0,24),op:msg,time:t,date:self.today(),anomaly:true});
+  // anti-double-scan : même badge ignoré pendant 90 s après un scan
+  if(!this.scan.cool)this.scan.cool={};
+  if(this.scan.cool[raw]&&Date.now()-this.scan.cool[raw]<90000)return;
+  function reject(msg){self.scan.cool[raw]=Date.now();self.scan.count++;self.scan.rej++;self.scan.last.unshift({ok:false,nom:raw.slice(0,24),op:msg,time:t,date:self.today(),anomaly:true});
     self.scan.last=self.scan.last.slice(0,10);self.beep(false);self.flash(false);updStatus(msg,false);
     var st=document.getElementById("cRej");if(st)st.textContent=self.scan.rej;
     var ls=document.getElementById("lastScan");if(ls)ls.innerHTML="<div class=\"msg no\">✕ "+esc(msg)+"</div>";
@@ -965,6 +969,7 @@ handleScan:function(raw){raw=String(raw||"").trim();if(!raw)return;
   if(anomaly)notify("Pointage hors "+this.T("site")+" : "+w.prenom+" "+w.nom+" ("+OPS[proposed]+" "+t+")","wn");
   audit("scan","event",ev.id,null,{type:proposed,time:t,worker:w.nom+" "+w.prenom},"");
   dbSave();
+  this.scan.cool[raw]=Date.now();
   this.scan.count++;this.scan.ok++;this.scan.last=this.scan.last||[];
   this.scan.last.unshift({ok:true,nom:w.prenom+" "+w.nom,op:OPS[proposed],time:t,date:today(),anomaly:anomaly});
   this.scan.last=this.scan.last.slice(0,10);
