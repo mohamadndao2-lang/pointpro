@@ -99,6 +99,7 @@ details.faq .b{margin-top:8px;color:var(--mut);line-height:1.7;font-size:14px}
 .bigbtn:active{transform:scale(.98)}
 @media print{body{background:#fff;color:#000;padding:0}.noprint{display:none!important}.tabbar,.topbar{display:none!important}#view{padding:0;max-width:none}.card{border:none;background:#fff;color:#000}h3{color:#000!important}.prbadge{page-break-inside:avoid}}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" onerror="var s=document.createElement('script');s.src='https://unpkg.com/jsqr@1.4.0/dist/jsQR.js';document.head.appendChild(s)"></script>
 </head>
 <body>
 <div id="login" style="display:none;min-height:100vh;padding:28px 20px;max-width:430px;margin:0 auto">
@@ -259,6 +260,17 @@ function rsDecode(cw,ec){
 function qrDecodeVideo(v){var W=v.videoWidth,H=v.videoHeight;if(!W||!H)return null;
   var cv=qrDecodeVideo.cv||(qrDecodeVideo.cv=document.createElement("canvas"));
   var g=cv.getContext("2d");
+  function jsqrTry(cw2,ch2){if(!window.jsQR)return null;
+    try{var d2=g.getImageData(0,0,cw2,ch2);var r2=window.jsQR(d2.data,cw2,ch2,{inversionAttempts:"attemptBoth"});
+      return r2&&r2.data?r2.data:null}catch(e){return null}}
+  // jsQR d'abord (gère la perspective et les angles), à haute résolution puis 640
+  var s1=Math.min(1,960/Math.min(W,H)),w1=Math.round(W*s1),h1=Math.round(H*s1);
+  cv.width=w1;cv.height=h1;g.drawImage(v,0,0,w1,h1);
+  var r1=jsqrTry(w1,h1);if(r1)return r1;
+  var s2=Math.min(1,640/Math.min(W,H)),w2=Math.round(W*s2),h2=Math.round(H*s2);
+  cv.width=w2;cv.height=h2;g.drawImage(v,0,0,w2,h2);
+  var r2b=jsqrTry(w2,h2);if(r2b)return r2b;
+  // moteur intégré en secours (420 puis 640)
   for(var si=0;si<2;si++){var S=si?640:420,sc2=Math.min(1,S/Math.min(W,H)),cw=Math.round(W*sc2),ch=Math.round(H*sc2);
     cv.width=cw;cv.height=ch;g.drawImage(v,0,0,cw,ch);
     var d=g.getImageData(0,0,cw,ch),px=d.data,gray=new Uint8Array(cw*ch);
@@ -955,7 +967,8 @@ scanDiag:function(){var v=document.getElementById("scv");
       if(vr>mx){mx=vr;th=i}}
     thUsed=th;
     var r=null;try{r=qrDecodeGray(gray,cw,ch)}catch(e){r=null}
-    results.push(S0+"px : "+(r?("LU → "+r):"non lu"));
+    var rj=null;if(window.jsQR){try{var dj=g.getImageData(0,0,cw,ch);var q=window.jsQR(dj.data,cw,ch,{inversionAttempts:"attemptBoth"});rj=q&&q.data?q.data:null}catch(e){rj=null}}
+    results.push(S0+"px : "+(rj?("LU (jsQR) → "+rj):(r?("LU (intégré) → "+r):"non lu")));
     if(S0===640||!binUrl){
       binCv.width=cw;binCv.height=ch;var bg=binCv.getContext("2d");
       var im=bg.createImageData(cw,ch);
