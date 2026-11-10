@@ -703,6 +703,7 @@ workerSheet:function(id,isNew){var w=this.workerById(id);if(!w)return;
   "<div class=\"grid2\"><button class=\"btn sm\" onclick=\"App.editWorkerSheet('"+w.id+"')\">✏️ Modifier</button>"+
   "<button class=\"btn sm\" onclick=\"App.toggleWorker('"+w.id+"')\">"+(w.statut==="actif"?"🚫 Suspendre":"✔ Réactiver")+"</button>"+
   "<button class=\"btn sm warn\" onclick=\"App.renewBadge('"+w.id+"')\">🔄 Nouveau badge</button>"+
+  "<button class=\"btn sm warn\" onclick=\"App.delBadge('"+w.id+"')\">🗑️ Supprimer badge</button>"+
   "<button class=\"btn sm\" onclick=\"App.releve('"+w.id+"')\">📊 Relevé 7 jours</button></div>"+
   (isNew?"<div class=\"msg ok\" style=\"margin-top:12px\">🎉 Fiche créée : identifiant <b>"+esc(w.matricule)+"</b> et QR Code générés automatiquement. Imprime le badge et il est immédiatement utilisable au scanner.</div>":""))},
 badgeHtml:function(w){var c=this.myCompany(),b=this.badgeOf(w.id);
@@ -742,6 +743,10 @@ siteSelChg:function(sel){if(sel.value!=="__new__"){sel.setAttribute("data-prev",
   DB.sites.push(s);audit("create","site",s.nom,null,null,"");dbSave();
   var o=document.createElement("option");o.value=s.id;o.textContent=s.nom;sel.insertBefore(o,sel.options[sel.options.length-1]);
   sel.value=s.id;sel.setAttribute("data-prev",s.id);this.toast(this.T("site")+" créé ✅","ok")},
+delBadge:function(id){var w=this.workerById(id);if(!w)return;
+  if(!confirm("Supprimer le badge de "+w.prenom+" "+w.nom+" ?\nLe QR Code ne permettra plus de pointer."))return;
+  var n=0;DB.badges=DB.badges.filter(function(b){if(b.workerId===id){n++;audit("delete","badge",id,null,{token:b.token},"Suppression badge");return false}return true});
+  dbSave();notify("Badge supprimé : "+w.prenom+" "+w.nom,"wn");this.closeSheet();this.workerSheet(id);this.toast(n?"Badge supprimé 🗑️":"Aucun badge à supprimer","ok")},
 renewBadge:function(id){var w=this.workerById(id);
   if(!confirm("Créer un nouveau badge ? L’ancien QR Code sera révoqué et ne permettra plus de pointer."))return;
   sc(DB.badges).forEach(function(b){if(b.workerId===id){b.status="revoked";b.revokedAt=today()}});
@@ -920,6 +925,13 @@ beep:function(ok){try{var ac=this.ac||new(window.AudioContext||window.webkitAudi
   g.gain.value=0.25;o.connect(g);g.connect(ac.destination);o.start();setTimeout(function(){o.stop()},ok?120:300)}catch(e){}},
 flash:function(ok){var f=document.getElementById("scanflash");if(!f)return;
   f.style.background=ok?"#34d399":"#f87171";f.style.opacity=0.55;setTimeout(function(){f.style.opacity=0},220)},
+scanPop:function(ok,title,sub){var old=document.getElementById("scanPop");if(old)old.remove();
+  var d=document.createElement("div");d.id="scanPop";
+  d.style.cssText="position:fixed;left:50%;top:16%;transform:translateX(-50%);z-index:9999;min-width:260px;max-width:86%;padding:18px 28px;border-radius:16px;text-align:center;font-family:Arial,sans-serif;box-shadow:0 10px 40px rgba(0,0,0,.45);background:"+(ok?"#065f46":"#7f1d1d")+";color:#fff;border:2px solid "+(ok?"#34d399":"#f87171");
+  d.innerHTML="<div style='font-size:46px;line-height:1'>"+(ok?"✅":"⛔")+"</div><div style='font-size:20px;font-weight:900;margin-top:6px'>"+esc(title)+"</div>"+(sub?"<div style='font-size:14px;opacity:.92;margin-top:3px'>"+esc(sub)+"</div>":"");
+  document.body.appendChild(d);
+  if(navigator.vibrate)try{navigator.vibrate(ok?80:[80,60,80])}catch(e){}
+  setTimeout(function(){d.style.transition="opacity .4s";d.style.opacity=0;setTimeout(function(){d.remove()},420)},ok?2500:3000)},
 manualScan:function(){var t=val("manualTk").trim();if(!t){this.toast("Saisis un identifiant","no");return}
   this.handleScan(t);document.getElementById("manualTk").value=""},
 // ---- VALIDATION D’UN SCAN (cœur métier anti-fraude) ----
@@ -929,7 +941,7 @@ handleScan:function(raw){raw=String(raw||"").trim();if(!raw)return;
   // anti-double-scan : même badge ignoré pendant 90 s après un scan
   if(!this.scan.cool)this.scan.cool={};
   if(this.scan.cool[raw]&&Date.now()-this.scan.cool[raw]<90000)return;
-  function reject(msg){self.scan.cool[raw]=Date.now();self.scan.count++;self.scan.rej++;self.scan.last.unshift({ok:false,nom:raw.slice(0,24),op:msg,time:t,date:self.today(),anomaly:true});
+  function reject(msg){self.scan.cool[raw]=Date.now();self.scan.count++;self.scan.rej++;self.scanPop(false,"Scan refusé",msg);self.scan.last.unshift({ok:false,nom:raw.slice(0,24),op:msg,time:t,date:self.today(),anomaly:true});
     self.scan.last=self.scan.last.slice(0,10);self.beep(false);self.flash(false);updStatus(msg,false);
     var st=document.getElementById("cRej");if(st)st.textContent=self.scan.rej;
     var ls=document.getElementById("lastScan");if(ls)ls.innerHTML="<div class=\"msg no\">✕ "+esc(msg)+"</div>";
@@ -973,7 +985,7 @@ handleScan:function(raw){raw=String(raw||"").trim();if(!raw)return;
   this.scan.count++;this.scan.ok++;this.scan.last=this.scan.last||[];
   this.scan.last.unshift({ok:true,nom:w.prenom+" "+w.nom,op:OPS[proposed],time:t,date:today(),anomaly:anomaly});
   this.scan.last=this.scan.last.slice(0,10);
-  this.beep(true);this.flash(true);updStatus(w.prenom+" "+w.nom+" — "+OPS[proposed]+" enregistré à "+t,true);
+  this.beep(true);this.flash(true);this.scanPop(true,w.prenom+" "+w.nom,OPS[proposed]+" enregistré à "+t+(anomaly?" · ⚠ hors site":""));updStatus(w.prenom+" "+w.nom+" — "+OPS[proposed]+" enregistré à "+t,true);
   var c1=document.getElementById("cTot");if(c1)c1.textContent=this.scan.count;
   var c2=document.getElementById("cOk");if(c2)c2.textContent=this.scan.ok;
   var ls=document.getElementById("lastScan");
