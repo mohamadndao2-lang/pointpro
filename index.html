@@ -859,8 +859,10 @@ vScan:function(){if(!can("scan"))return this.deny();
   "<div id=\"scanbox\"><video id=\"scv\" autoplay playsinline muted></video><div id=\"scanframe\"></div><div id=\"scanflash\"></div>"+
   "<div style=\"position:absolute;top:8px;left:8px;display:flex;gap:8px\">"+
   "<button class=\"btn sm\" onclick=\"App.stopScan()\">✕ Arrêter</button>"+
-  "<button class=\"btn sm\" id=\"torchBtn\" onclick=\"App.toggleTorch()\">🔆 Torche</button></div></div>"+
+  "<button class=\"btn sm\" id=\"torchBtn\" onclick=\"App.toggleTorch()\">🔆 Torche</button>"+
+  "<button class=\"btn sm\" onclick=\"App.scanDiag()\">🔍 Diagnostic</button></div></div>"+
   "<div id=\"scanStatus\" style=\"text-align:center;padding:12px;font-weight:800\">Scanne un badge…</div>"+
+  "<div id=\"scanDiagOut\"></div>"+
   "<div class=\"grid3\" style=\"margin-bottom:10px\"><div class=\"counter\">Scans : <span id=\"cTot\">"+this.scan.count+"</span></div>"+
   "<div class=\"counter\" style=\"color:#6ee7b7\">✓ <span id=\"cOk\">"+this.scan.ok+"</span></div>"+
   "<div class=\"counter\" style=\"color:#fca5a5\">✕ <span id=\"cRej\">"+this.scan.rej+"</span></div></div>"+
@@ -934,6 +936,40 @@ scanPop:function(ok,title,sub){var old=document.getElementById("scanPop");if(old
   setTimeout(function(){d.style.transition="opacity .4s";d.style.opacity=0;setTimeout(function(){d.remove()},420)},ok?2500:3000)},
 manualScan:function(){var t=val("manualTk").trim();if(!t){this.toast("Saisis un identifiant","no");return}
   this.handleScan(t);document.getElementById("manualTk").value=""},
+scanDiag:function(){var v=document.getElementById("scv");
+  if(!v||!v.videoWidth){this.toast("Démarre d'abord le scan (caméra)","no");return}
+  var W=v.videoWidth,H=v.videoHeight,cv=document.createElement("canvas"),binCv=document.createElement("canvas");
+  var results=[],binUrl=null,thUsed=null;
+  [320,420,640,900].forEach(function(S0){
+    if(S0>Math.max(W,H))return;
+    var sc2=Math.min(1,S0/Math.min(W,H)),cw=Math.round(W*sc2),ch=Math.round(H*sc2);
+    cv.width=cw;cv.height=ch;var g=cv.getContext("2d");g.drawImage(v,0,0,cw,ch);
+    var d=g.getImageData(0,0,cw,ch),px=d.data,gray=new Uint8Array(cw*ch);
+    for(var i=0,j=0;i<px.length;i+=4,j++)gray[j]=(px[i]*3+px[i+1]*4+px[i+2])>>3;
+    var hist=new Array(256);for(i=0;i<256;i++)hist[i]=0;
+    for(i=0;i<gray.length;i++)hist[gray[i]]++;
+    var sum=0;for(i=0;i<256;i++)sum+=i*hist[i];
+    var sumB=0,wB=0,mx=0,th=128;
+    for(i=0;i<256;i++){wB+=hist[i];if(!wB)continue;var wF=gray.length-wB;if(!wF)break;
+      sumB+=i*hist[i];var mB=sumB/wB,mF=(sum-sumB)/wF,vr=wB*wF*(mB-mF)*(mB-mF);
+      if(vr>mx){mx=vr;th=i}}
+    thUsed=th;
+    var r=null;try{r=qrDecodeGray(gray,cw,ch)}catch(e){r=null}
+    results.push(S0+"px : "+(r?("LU → "+r):"non lu"));
+    if(S0===640||!binUrl){
+      binCv.width=cw;binCv.height=ch;var bg=binCv.getContext("2d");
+      var im=bg.createImageData(cw,ch);
+      for(var k=0;k<gray.length;k++){var vv=gray[k]<=th?0:255;
+        im.data[k*4]=vv;im.data[k*4+1]=vv;im.data[k*4+2]=vv;im.data[k*4+3]=255}
+      bg.putImageData(im,0,0);binUrl=binCv.toDataURL("image/png")}
+  });
+  var out=document.getElementById("scanDiagOut");if(!out)return;
+  out.innerHTML="<div class=\"card\" style=\"margin-top:12px\"><h3>🔍 Diagnostic de lecture</h3>"+
+  "<div class=\"small mut\">Caméra : "+W+"×"+H+" px · seuil binarisation : "+thUsed+"</div>"+
+  "<div style=\"margin-top:8px\">"+results.map(function(r){return "<div style=\"padding:3px 0\">"+esc(r)+"</div>"}).join("")+"</div>"+
+  "<div class=\"small mut\" style=\"margin-top:8px\">Image telle que le lecteur la voit (binarisée) :</div>"+
+  "<img src=\""+binUrl+"\" style=\"width:100%;margin-top:6px;border:1px solid #334155;border-radius:8px;image-rendering:pixelated\">"+
+  "<div class=\"small mut\" style=\"margin-top:8px\">Si le QR n'apparaît pas net en noir et blanc sur cette image, c'est un problème de netteté/reflet — rapproche le téléphone ou agrandis le QR à l'écran. 📸 Envoie une capture d'écran de ce cadre pour le débogage.</div></div>"},
 // ---- VALIDATION D’UN SCAN (cœur métier anti-fraude) ----
 handleScan:function(raw){raw=String(raw||"").trim();if(!raw)return;
   var u=this.user(),siteId=this.scan.siteId,d=today(),t=nowTime();
