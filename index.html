@@ -14,7 +14,7 @@
 :root{--bg:#0b1220;--card:#111c33;--card2:#0d1626;--line:#23324e;--mut:#8ea3c2;--txt:#eaf1fb;--cy:#22d3ee;--gr:#34d399;--or:#fbbf24;--rd:#f87171;--vio:#a78bfa}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
-body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:16px;padding-bottom:76px;overscroll-behavior-y:contain}
+body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:16px;padding-bottom:120px;overscroll-behavior-y:contain}
 input,select,textarea,button{font:inherit;color:inherit}
 input,select,textarea{background:#0a1322;border:1px solid var(--line);border-radius:12px;padding:12px 14px;width:100%;min-height:46px;outline:none}
 input:focus,select:focus,textarea:focus{border-color:var(--cy)}
@@ -35,7 +35,7 @@ label.fld{display:block;font-size:12px;font-weight:700;color:var(--mut);text-tra
 .topbar{position:sticky;top:0;z-index:50;background:#0a1322e8;backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;gap:12px;padding-top:calc(12px + env(safe-area-inset-top))}
 .topbar .brand{font-weight:900;font-size:17px;background:linear-gradient(135deg,#22d3ee,#34d399);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .topbar select{max-width:40vw;flex:1}
-.tabbar{position:fixed;bottom:0;left:0;right:0;z-index:50;background:#0a1322f2;backdrop-filter:blur(10px);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom)}
+.tabbar{position:fixed;bottom:0;left:0;right:0;z-index:50;background:#0a1322;border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom);transform:translateZ(0);will-change:transform}
 .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 4px 8px;color:var(--mut);font-size:10.5px;font-weight:700;cursor:pointer;border-top:2px solid transparent}
 .tab .ic{font-size:21px}
 .tab.on{color:var(--cy);border-top:2px solid var(--cy);background:#0d1c3088}
@@ -1212,20 +1212,47 @@ qzText:function(from,to){var c=this.myCompany(),rows=this.qzRows(from,to),tot=th
   L+="\n\nTOTAL — "+tot.people+" ouvrier(s) : "+fmtH(tot.hours)+" travaillées · "+fmtH(tot.hs)+" supplémentaires · "+fmM(tot.money)+" à verser";
   L+="\n\nGénéré automatiquement par POINTPRO le "+dLabel(today())+" · Édité par "+(this.user()?this.user().name:"—");
   return L},
+qzFiles:function(from,to){var rows=this.qzRows(from,to),tot=this.qzTotals(from,to),c=this.myCompany();
+  var head=["Ouvrier","Matricule","Jours pointés","Heures","HS","À payer (F)"];
+  var data=[head].concat(rows.map(function(r){return[r.w.nom+" "+r.w.prenom,r.w.matricule,r.p.rawDays,String(fmtH(r.p.hours)),String(fmtH(r.p.hs)),Math.round(r.p.estimated)]}));
+  data.push(["TOTAL — "+tot.people+" ouvrier(s)","",tot.people,String(fmtH(tot.hours)),String(fmtH(tot.hs)),Math.round(tot.money)]);
+  var xbytes=buildXlsx("Quinzaine",data);
+  function run(t,bold){return"<w:r><w:rPr>"+(bold?"<w:b/>":"")+"<w:sz w:val=\"20\"/>"+(bold?"<w:color w:val=\"0e7490\"/>":"")+"</w:rPr><w:t>"+escX(t)+"</w:t></w:r>"}
+  function para(t,bold,sz){return"<w:p><w:r><w:rPr>"+(bold?"<w:b/>":"")+"<w:sz w:val=\""+(sz||20)+"\"/>"+(sz&&sz>=22?"<w:color w:val=\"0e7490\"/>":"")+"</w:rPr><w:t>"+escX(t)+"</w:t></w:r></w:p>"}
+  function tr(cells,bold){return"<w:tr>"+cells.map(function(cl){return"<w:tc><w:tcPr><w:tcW w:w=\"1400\" w:type=\"dxa\"/></w:tcPr><w:p>"+run(String(cl),bold)+"</w:p></w:tc>"}).join("")+"</w:tr>"}
+  var bx="";
+  bx+=para((c?c.name:"POINTPRO"),true,26)+para("RAPPORT DE QUINZAINE — "+this.qzLabel(from),true,22);
+  bx+=para((c?[c.adresse,c.ville,c.tel1].filter(Boolean).join(" · "):""),false,16);
+  bx+=para("Période : du "+dLabel(from)+" au "+dLabel(to),false)+para("Échéance de paiement : "+dLabel(this.qzDeadline(from,to)),true);
+  bx+="<w:tbl><w:tblPr><w:tblW w:w=\"9500\" w:type=\"dxa\"/><w:tblBorders>"+["top","left","bottom","right","insideH","insideV"].map(function(s){return"<w:"+s+" w:val=\"single\" w:sz=\"4\" w:color=\"334155\"/>"}).join("")+"</w:tblBorders></w:tblPr>"+
+  tr(head,true)+rows.map(function(r){return tr([r.w.nom+" "+r.w.prenom,r.w.matricule,r.p.rawDays,fmtH(r.p.hours),fmtH(r.p.hs),fmM(r.p.estimated)],false)}).join("")+
+  tr(["TOTAL","",tot.people+" ouvrier(s)",fmtH(tot.hours),fmtH(tot.hs),fmM(tot.money)],true)+"</w:tbl>";
+  bx+=para("",false)+para("Édité par "+(this.user()?this.user().name:"—")+" le "+dLabel(today()),false,16)+para("Élaboré avec POINTPRO — SaaS de pointage mobile",false,14);
+  var dbytes=buildDocx(bx,{rels:"",files:[]});
+  return[{name:"rapport_quinzaine_"+from+".xlsx",bytes:xbytes},{name:"rapport_quinzaine_"+from+".docx",bytes:dbytes}]},
 qzSendMail:function(from,to){var self=this,emails=this.qzEmails();
   if(!emails.length){this.toast("Aucun email configuré","no");return}
   if(!navigator.onLine){this.toast("Pas de connexion : réessaie en ligne ou utilise ✉️ Mail","no");return}
   var sub=this.qzSubject(from,to),body=this.qzText(from,to),done=0,fail=0;
-  this.toast("📧 Envoi du rapport quinzaine en cours…","inf");
+  var files=this.qzFiles(from,to);
+  this.toast("📧 Envoi du rapport quinzaine (Word + Excel joints)…","inf");
   DB.meta.qzLog.unshift({from:from,to:to,ts:new Date().toISOString(),by:this.user().name,pending:true});
   dbSave();
   emails.forEach(function(em){
-    fetch("https://formsubmit.co/ajax/"+em,{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({_subject:sub,_template:"box",_captcha:"false",message:body})})
-    .then(function(r){done++;if(r.ok)self.toast("📧 Envoyé à "+em,"ok");else{fail++;self.toast("Échec d'envoi à "+em,"no")}
+    var fd=new FormData();
+    fd.append("_subject",sub);fd.append("_captcha","false");fd.append("_template","table");
+    fd.append("Résumé",body);
+    files.forEach(function(f,idx){fd.append(idx?("attachment"+(idx+1)):"attachment",new Blob([f.bytes],{type:"application/octet-stream"}),f.name)});
+    fetch("https://formsubmit.co/ajax/"+em,{method:"POST",body:fd})
+    .then(function(r){done++;if(r.ok)self.toast("📧 Envoyé à "+em+" (Word + Excel joints)","ok");else{fail++;self.toast("Échec d'envoi à "+em,"no")}
       if(done===emails.length)self.afterQzSend(from,to,fail<emails.length)})
-    .catch(function(){done++;fail++;self.toast("Échec d'envoi à "+em,"no");
-      if(done===emails.length)self.afterQzSend(from,to,false)})})},
+    .catch(function(){ // repli : envoi texte seul
+      fetch("https://formsubmit.co/ajax/"+em,{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({_subject:sub,_template:"box",_captcha:"false",message:body})})
+      .then(function(r2){done++;if(r2.ok)self.toast("📧 Envoyé à "+em+" (texte, sans pièce jointe)","ok");else{fail++;self.toast("Échec d'envoi à "+em,"no")}
+        if(done===emails.length)self.afterQzSend(from,to,fail<emails.length)})
+      .catch(function(){done++;fail++;self.toast("Échec d'envoi à "+em,"no");
+        if(done===emails.length)self.afterQzSend(from,to,false)})})})},
 afterQzSend:function(from,to,ok){this.tmpMeta();
   DB.meta.qzLog=JSON.parse(JSON.stringify(DB.meta.qzLog));
   var l=DB.meta.qzLog.find(function(l){return l.from===from&&l.pending});
