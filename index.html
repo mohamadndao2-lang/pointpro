@@ -1243,8 +1243,9 @@ qzSendMail:function(from,to){var self=this,emails=this.qzEmails();
     fd.append("_subject",sub);fd.append("_captcha","false");fd.append("_template","table");
     fd.append("Résumé",body);
     files.forEach(function(f,idx){fd.append(idx?("attachment"+(idx+1)):"attachment",new Blob([f.bytes],{type:"application/octet-stream"}),f.name)});
-    fetch("https://formsubmit.co/ajax/"+em,{method:"POST",body:fd})
-    .then(function(r){done++;if(r.ok)self.toast("📧 Envoyé à "+em+" (Word + Excel joints)","ok");else{fail++;self.toast("Échec d'envoi à "+em,"no")}
+    // endpoint classique : c'est celui qui accepte officiellement les pièces jointes
+    fetch("https://formsubmit.co/"+em,{method:"POST",body:fd,redirect:"follow"})
+    .then(function(r){done++;if(r.ok||r.type==="opaque")self.toast("📧 Envoyé à "+em+" (Word + Excel joints)","ok");else{fail++;self.toast("Échec d'envoi à "+em,"no")}
       if(done===emails.length)self.afterQzSend(from,to,fail<emails.length)})
     .catch(function(){ // repli : envoi texte seul
       fetch("https://formsubmit.co/ajax/"+em,{method:"POST",headers:{"Content-Type":"application/json"},
