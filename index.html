@@ -570,7 +570,7 @@ render:function(){try{
   var sites=sc(DB.sites);
   document.getElementById("siteSel").innerHTML=sites.map(function(s){return"<option value=\""+s.id+"\""+(App.scan.siteId===s.id?" selected":"")+">"+esc(s.nom)+"</option>"}).join("");
   this.nav();
-  var V={home:this.vHome,scan:this.vScan,workers:this.vWorkers,reports:this.vReports,more:this.vMore,self:this.vSelf,tests:this.vTests,audit:this.vAudit,guides:this.vGuides,claims:this.vClaims,pay:this.vPay,times:this.vTimes,settings:this.vSettings,users:this.vUsers,sites:this.vSites};
+  var V={home:this.vHome,scan:this.vScan,workers:this.vWorkers,reports:this.vReports,more:this.vMore,self:this.vSelf,tests:this.vTests,audit:this.vAudit,guides:this.vGuides,claims:this.vClaims,pay:this.vPay,times:this.vTimes,settings:this.vSettings,users:this.vUsers,sites:this.vSites,mails:this.vMails};
   document.getElementById("view").innerHTML=V[this.tab].call(this);
   if(this.tab==="scan"&&this.scan.on)this.scanLoop();
 }catch(err){document.getElementById("view").innerHTML="<div class=\"msg no\">⚠️ Erreur d’affichage : "+esc(err.message)+" — réessaie, tes données sont sauvegardées.</div>"}},
@@ -1169,6 +1169,106 @@ payRange:function(w,from,to){var d=new Date(from+"T00:00:00"),end=new Date(to+"T
   else est=Math.round(w.tarif/2);
   return{hours:totH,hs:totHS,validDays:validDays,rawDays:rawDays,estimated:est}},
 hsMajor:function(){var c=this.myCompany();return c&&c.hsMajor?+c.hsMajor:1.25},
+// ---------- QUINZAINES & EMAILS ----------
+qzEmails:function(){this.tmpMeta();return DB.meta.reportEmails},
+tmpMeta:function(){DB.meta=DB.meta||{};DB.meta.qzSent=DB.meta.qzSent||{};DB.meta.qzLog=DB.meta.qzLog||[];
+  if(!DB.meta.reportEmails)DB.meta.reportEmails=["lamine.sagna@sethas.net","mohamad.ndao@sethas.net"];
+  if(DB.meta.qzAutoSend===undefined)DB.meta.qzAutoSend=false},
+qzAuto:function(){this.tmpMeta();return DB.meta.qzAutoSend},
+qzAutosendToggle:function(){this.tmpMeta();DB.meta.qzAutoSend=!DB.meta.qzAutoSend;
+  audit("update","settings","qzAutoSend",null,{value:DB.meta.qzAutoSend},"Envoi auto quinzaine");dbSave();this.render()},
+qzDeadline:function(from,to){var d=new Date(to+"T00:00:00");d.setDate(d.getDate()+3);
+  return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2)},
+qzMayNotify:function(){if(!this.user())return;this.tmpMeta();
+  var d=today(),cur=this.quinzRange(d);
+  var pe=new Date(cur.from+"T00:00:00");pe.setDate(pe.getDate()-1);
+  var prevTo=today(pe),prev=this.quinzRange(prevTo);
+  var self=this;
+  [prev,cur].forEach(function(q){
+    if(d>=q.to&&!DB.meta.qzSent["qz-"+q.from]){
+      var dl=self.qzDeadline(q.from,q.to);
+      if(!DB.meta.qzLog.some(function(l){return l.from===q.from&&!l.pending&&l.error!==true}))
+        notify("⏰ Quinzaine terminée ("+dLabel(q.from)+" → "+dLabel(q.to)+") : rapport de paie à envoyer — échéance "+dLabel(dl),"wn");
+      App.qzDue="qz-"+q.from}})},
+qzRows:function(from,to){var self=this,rows=[];
+  sc(DB.workers).forEach(function(w){var p=self.payRange(w,from,to);
+    if(p.rawDays>0)rows.push({w:w,p:p})});
+  rows.sort(function(a,b){return(a.w.nom+a.w.prenom).localeCompare(b.w.nom+b.w.prenom,"fr")});
+  return rows},
+qzTotals:function(from,to){var h=0,hs=0,money=0,people=0;
+  this.qzRows(from,to).forEach(function(r){h+=r.p.hours;hs+=r.p.hs;money+=r.p.estimated;people++});
+  return{hours:h,hs:hs,money:money,people:people}},
+qzSubject:function(from,to){var c=this.myCompany();
+  return"POINTPRO — Rapport "+this.qzLabel(from)+" ("+dLabel(from)+" au "+dLabel(to)+")"+(c?" · "+c.name:"")},
+qzLabel:function(from){var m=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"][+from.slice(5,7)-1];
+  return(from.slice(8,10)==="01"?"1re quinzaine":"2e quinzaine")+" "+m.charAt(0).toUpperCase()+m.slice(1)+" "+from.slice(0,4)},
+qzText:function(from,to){var c=this.myCompany(),rows=this.qzRows(from,to),tot=this.qzTotals(from,to),dl=this.qzDeadline(from,to);
+  var L="RAPPORT DE QUINZAINE — POINTPRO";
+  L+="\n"+(c?c.name:"")+(c&&c.ville?" · "+c.ville:"");
+  L+="\nPériode : du "+dLabel(from)+" au "+dLabel(to)+" ("+this.qzLabel(from).toLowerCase()+")";
+  L+="\nÉchéance de paiement : "+dLabel(dl);
+  L+="\n\nOuvrier | Matricule | Jours pointés | Heures | HS | À payer";
+  rows.forEach(function(r){L+="\n"+r.w.nom+" "+r.w.prenom+" | "+r.w.matricule+" | "+r.p.rawDays+" | "+fmtH(r.p.hours)+" | "+fmtH(r.p.hs)+" | "+fmM(r.p.estimated)});
+  L+="\n\nTOTAL — "+tot.people+" ouvrier(s) : "+fmtH(tot.hours)+" travaillées · "+fmtH(tot.hs)+" supplémentaires · "+fmM(tot.money)+" à verser";
+  L+="\n\nGénéré automatiquement par POINTPRO le "+dLabel(today())+" · Édité par "+(this.user()?this.user().name:"—");
+  return L},
+qzSendMail:function(from,to){var self=this,emails=this.qzEmails();
+  if(!emails.length){this.toast("Aucun email configuré","no");return}
+  if(!navigator.onLine){this.toast("Pas de connexion : réessaie en ligne ou utilise ✉️ Mail","no");return}
+  var sub=this.qzSubject(from,to),body=this.qzText(from,to),done=0,fail=0;
+  this.toast("📧 Envoi du rapport quinzaine en cours…","inf");
+  DB.meta.qzLog.unshift({from:from,to:to,ts:new Date().toISOString(),by:this.user().name,pending:true});
+  dbSave();
+  emails.forEach(function(em){
+    fetch("https://formsubmit.co/ajax/"+em,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({_subject:sub,_template:"box",_captcha:"false",message:body})})
+    .then(function(r){done++;if(r.ok)self.toast("📧 Envoyé à "+em,"ok");else{fail++;self.toast("Échec d'envoi à "+em,"no")}
+      if(done===emails.length)self.afterQzSend(from,to,fail<emails.length)})
+    .catch(function(){done++;fail++;self.toast("Échec d'envoi à "+em,"no");
+      if(done===emails.length)self.afterQzSend(from,to,false)})})},
+afterQzSend:function(from,to,ok){this.tmpMeta();
+  DB.meta.qzLog=JSON.parse(JSON.stringify(DB.meta.qzLog));
+  var l=DB.meta.qzLog.find(function(l){return l.from===from&&l.pending});
+  if(l){l.pending=false;l.ok=ok}
+  if(ok)DB.meta.qzSent["qz-"+from]={to:to,sentAt:today()};
+  dbSave();audit("send","quinzaine","qz-"+from,null,{ok:ok},"Rapport quinzaine");
+  if(this.qzDue==="qz-"+from)this.qzDue=null;
+  this.render()},
+qzMailto:function(from,to){var emails=this.qzEmails();
+  location.href="mailto:"+emails.join(",")+"?subject="+encodeURIComponent(this.qzSubject(from,to))+"&body="+encodeURIComponent(this.qzText(from,to))},
+qzOptions:function(){var out=[],d=new Date(today()+"T00:00:00"),self=this;
+  for(var i=0;i<6;i++){var q=self.quinzRange(today(d));out.push({from:q.from,to:q.to,label:self.qzLabel(q.from)+"  (du "+dLabel(q.from)+" au "+dLabel(q.to)+")"});
+    d.setDate(d.getDate()-16)}
+  return out},
+vMails:function(){if(!can("manage"))return this.deny();
+  var self=this,emails=this.qzEmails(),auto=this.qzAuto(),d=today(),q=this.quinzRange(d);
+  var curFrom=q.from,curTo=q.to,dl=this.qzDeadline(curFrom,curTo),sent=DB.meta.qzSent["qz-"+curFrom];
+  return this.sec("Quinzaines & emails","Rapports de paie quinzaine envoyés automatiquement aux emails de la direction")+
+  "<div class=\"card\"><h3>📧 Emails destinataires des rapports</h3>"+
+  "<div class=\"mut small\">Tous les rapports de quinzaine et les alertes de paiement partent à ces adresses.</div>"+
+  emails.map(function(em,i){return"<div class=\"lrow\" style=\"margin-top:8px\"><div style=\"font-size:18px\">📮</div><div class=\"grow nm\" style=\"font-size:13px\">"+esc(em)+"</div><div class=\"chip\" onclick=\"App.delEmail("+i+")\">✕</div></div>"}).join("")+
+  "<label class=\"fld\" style=\"margin-top:10px\">Ajouter un email</label><input id=\"em_n\" placeholder=\"nom@entreprise.net\">"+
+  "<button class=\"btn blk\" style=\"margin-top:8px\" onclick=\"App.addEmail()\">➕ Ajouter l'email</button></div>"+
+  "<div class=\"card\" style=\"margin-top:14px\"><h3>🤖 Envoi automatique — "+(auto?"ACTIVÉ":"désactivé")+"</h3>"+
+  "<div class=\"mut small\">À chaque fin de quinzaine (le 15 et le dernier jour du mois), dès qu'un responsable ouvre POINTPRO, le rapport complet (personnes, heures, montants à payer) est envoyé aux emails ci-dessus, avec l'échéance de paiement.</div>"+
+  "<button class=\"btn blk "+(auto?"":"primary")+"\" style=\"margin-top:10px\" onclick=\"App.qzAutosendToggle()\">"+(auto?"🔕 Désactiver l'envoi automatique":"🔔 Activer l'envoi automatique")+"</button>"+
+  "<div class=\"msg wn\" style=\"margin-top:10px\">⚠ Lors du tout premier envoi, le service d'acheminement (FormSubmit) envoie un lien d'activation à chaque adresse. Ouvre les boîtes <b>"+esc(emails.join("</b> et <b>"))+"</b>, clique sur le lien d'activation <b>une seule fois</b> — ensuite tout partira automatiquement.</div></div>"+
+  "<div class=\"card\" style=\"margin-top:14px\"><h3>🗓️ Quinzaine en cours : "+this.qzLabel(curFrom)+"</h3>"+
+  "<div class=\"mut small\">Du "+dLabel(curFrom)+" au "+dLabel(curTo)+" · échéance de paiement : "+dLabel(dl)+"</div>"+
+  "<div class=\"mut small\" style=\"margin-top:6px\">Chaque pointage est rattaché automatiquement à la quinzaine de sa date : les pointages d'aujourd'hui comptent dans cette quinzaine, jamais dans la précédente.</div>"+
+  "<div class=\"grid2\" style=\"margin-top:10px\"><button class=\"btn primary\" onclick=\"App.qzSendMail('"+curFrom+"','"+curTo+"')\">📧 Envoyer le rapport maintenant</button>"+
+  "<button class=\"btn\" onclick=\"App.qzMailto('"+curFrom+"','"+curTo+"')\">✉️ Via mon app mail</button></div>"+
+  (sent?"<div class=\"msg ok\" style=\"margin-top:10px\">✓ Rapport envoyé le "+dLabel(sent.sentAt)+"</div>":"")+"</div>"+
+  "<div class=\"card\" style=\"margin-top:14px\"><h3>🧾 Historique des envois</h3>"+
+  (DB.meta.qzLog.length?DB.meta.qzLog.slice(0,10).map(function(l){return"<div class=\"mut small\" style=\"padding:4px 0\">"+(l.ok?"✓":l.pending?"⏳":"✕")+" "+esc(App.qzLabel(l.from))+" · "+l.ts.slice(0,16).replace("T"," ")+" · "+esc(l.by||"")+"</div>"}).join(""):"<div class=\"mut small\">Aucun envoi pour l'instant.</div>")+"</div>"},
+addEmail:function(){if(!can("manage"))return this.deny();
+  var v=val("em_n").trim();if(!v||v.indexOf("@")<1){this.toast("Email invalide","no");return}
+  if(this.qzEmails().indexOf(v)>=0){this.toast("Email déjà présent","no");return}
+  DB.meta.reportEmails.push(v);audit("create","settings","email",null,{email:v},"Email rapport");dbSave();this.toast("Email ajouté ✅","ok");this.render()},
+delEmail:function(i){if(!can("manage"))return this.deny();
+  if(DB.meta.reportEmails.length<=1){this.toast("Garde au moins un email","no");return}
+  var v=DB.meta.reportEmails[i];DB.meta.reportEmails.splice(i,1);
+  audit("delete","settings","email",null,{email:v},"Suppression email rapport");dbSave();this.render()},
 vPay:function(){if(!can("pay"))return this.deny();
   var ym=this.payMonth||(new Date().getFullYear()+"-"+("0"+(new Date().getMonth()+1)).slice(-2));
   var ws=sc(DB.workers),self=this;
@@ -1211,8 +1311,29 @@ reportsXlsx:function(kind,ids,from,to){var rows=this.reportRows(ids,from,to);
   var data=[head].concat(rows.map(function(r){return[r[0],r[1],r[2],r[3],r[4],r[5],r[6],r[7],r[8],r[9]]}));
   dl(buildXlsx("Presences",data),"presences_"+kind+"_"+from+".xlsx");this.toast("Rapport Excel téléchargé ✅","ok")},
 vReports:function(){if(!can("reports"))return this.deny();
-  var ws=sc(DB.workers),d=today();
+  var ws=sc(DB.workers),d=today(),self=this;
+  this.tmpMeta();this.qzMayNotify();
+  if(!this.qzPeriodSel){var q0=this.quinzRange(d);this.qzPeriodSel=q0.from+"|"+q0.to}
+  var psel=this.qzPeriodSel.split("|"),pfrom=psel[0],pto=psel[1];
+  var qrows=this.qzRows(pfrom,pto),qtot=this.qzTotals(pfrom,pto);
+  var dl=this.qzDeadline(pfrom,pto),qsent=DB.meta.qzSent["qz-"+pfrom];
+  var qzCard="<div class=\"card\"><h3>💵 Rapport quinzaine — paie</h3>"+
+  "<div class=\"mut small\">Jours pointés, heures travaillées et montant à payer par ouvrier. Chaque pointage est rattaché automatiquement à la quinzaine de sa date — jamais à la période précédente.</div>"+
+  "<label class=\"fld\" style=\"margin-top:10px\">Période</label><select onchange=\"App.qzPeriodSel=this.value;App.render()\">"+
+  this.qzOptions().map(function(o){return"<option value=\""+o.from+"|"+o.to+"\""+(o.from===pfrom?" selected":"")+">"+esc(o.label)+"</option>"}).join("")+"</select>"+
+  (qrows.length?"<table class=\"d\" style=\"margin-top:10px\"><tr><th>Ouvrier</th><th>Jours</th><th>Heures</th><th>HS</th><th>À payer</th></tr>"+
+  qrows.map(function(r){return"<tr><td>"+esc(r.w.nom+" "+r.w.prenom)+"</td><td>"+r.p.rawDays+"</td><td>"+fmtH(r.p.hours)+"</td><td>"+fmtH(r.p.hs)+"</td><td class=\"green\"><b>"+fmM(r.p.estimated)+"</b></td></tr>"}).join("")+
+  "<tr><th>TOTAL</th><th>"+qtot.people+"</th><th>"+fmtH(qtot.hours)+"</th><th>"+fmtH(qtot.hs)+"</th><th class=\"green\">"+fmM(qtot.money)+"</th></tr></table>":"<div class=\"mut small\" style=\"margin-top:10px\">Aucun pointage sur cette quinzaine.</div>")+
+  (qsent?"<div class=\"msg ok\" style=\"margin-top:10px\">✓ Rapport envoyé aux emails direction le "+dLabel(qsent.sentAt)+"</div>":
+  "<div class=\"msg wn\" style=\"margin-top:10px\">⏳ Rapport pas encore envoyé · échéance de paiement : "+dLabel(dl)+"</div>")+
+  "<div class=\"grid3\" style=\"margin-top:10px\">"+
+  "<button class=\"btn sm\" onclick=\"App.reportsDocx('quinzaine',App.allWorkerIds(),'"+pfrom+"','"+pto+"')\">📄 Word</button>"+
+  "<button class=\"btn sm\" onclick=\"App.reportsXlsx('quinzaine',App.allWorkerIds(),'"+pfrom+"','"+pto+"')\">📊 Excel</button>"+
+  "<button class=\"btn sm\" onclick=\"App.reportsPdf('quinzaine','"+pfrom+"','"+pto+"')\">🖨️ PDF</button></div>"+
+  "<div class=\"grid2\" style=\"margin-top:8px\"><button class=\"btn sm primary\" onclick=\"App.qzSendMail('"+pfrom+"','"+pto+"')\">📧 Envoyer aux emails direction</button>"+
+  "<button class=\"btn sm\" onclick=\"App.qzMailto('"+pfrom+"','"+pto+"')\">✉️ Via mon app mail</button></div></div>";
   return this.sec("Rapports & exports","Documents professionnels avec l’identité de ton entreprise — Word, Excel, PDF")+
+  qzCard+
   [["journalier","📅 Rapport journalier",today(),today()],["hebdo","🗓️ Rapport hebdomadaire",this.dateAdd(today(),-6),today()],
   ["mensuel","📆 Rapport mensuel",today().slice(0,8)+"01",today()]].map(function(r){
     return"<div class=\"card\"><h3>"+r[1]+"</h3><div class=\"mut small\">"+dLabel(r[2])+" → "+dLabel(r[3])+"</div>"+
@@ -1245,7 +1366,7 @@ printHtml:function(html){var w=window.open("","_blank");if(!w){this.toast("Autor
 // ---------- PLUS / RÉGLAGES ----------
 vMore:function(){return this.sec("Plus","Configuration, sécurité et supervision")+
   [["times","⏱️ Heures & validation","times"],["claims","✋ Réclamations","claims"],["pay","💵 Rémunérations","pay"],
-  ["sites","📍 "+this.T("site")+"s & équipes","sites"],["users","👤 Utilisateurs & rôles","users"],["settings","🏢 Mon entreprise","settings"],
+  ["sites","📍 "+this.T("site")+"s & équipes","sites"],["users","👤 Utilisateurs & rôles","users"],["mails","📧 Quinzaines & emails","mails"],["settings","🏢 Mon entreprise","settings"],
   ["audit","🛡️ Journal d’audit","audit"],["notif","🔔 Notifications","notif"],["tests","🧪 Auto-tests","tests"],["guides","📖 Guides & FAQ","guides"]]
   .filter(function(m){return true}).map(function(m){return"<div class=\"lrow\" onclick=\"App.setTab('"+m[2]+"')\" style=\"cursor:pointer\"><div style=\"font-size:22px\">"+m[0].slice(0,3)+"</div><div class=\"grow\"><div class=\"nm\" style=\"font-size:15px\">"+m[0]+"</div></div><div class=\"mut\">›</div></div>"}).join("")+
   "<div class=\"grid2\" style=\"margin-top:14px\"><button class=\"btn\" onclick=\"App.backupExport()\">💾 Sauvegarde</button>"+
@@ -1459,6 +1580,7 @@ runTests:function(){var T=[],self=this;
 });
 window.addEventListener("load",function(){dbLoad();if(App.resume()){document.getElementById("login").style.display="none";document.getElementById("app").style.display="block";
   App.scan.siteId=App.firstSite();App.tab=App.user().role==="ouvrier"?"self":"home";App.render()}else App.init();
+  App.qzMayNotify();
   if("serviceWorker" in navigator&&location.protocol==="https:"){navigator.serviceWorker.register("sw.js").catch(function(){})}});
 window.addEventListener("online",function(){App.toast("Connexion rétablie — les pointages hors ligne restent marqués pour vérification","ok")});
 </script>
